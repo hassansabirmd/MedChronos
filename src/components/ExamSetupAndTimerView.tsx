@@ -18,6 +18,8 @@ import {
   Sun,
   Maximize2,
   Minimize2,
+  Smartphone,
+  Move,
 } from 'lucide-react';
 import {
   EXAM_PROFILES,
@@ -28,6 +30,7 @@ import {
   formatSecondsToClock,
   formatMinutesToHoursAndMinutes,
   resolvePostBlockDecision,
+  calculateAmoledBurnInProtection,
   DEFAULT_DECISION_TIMEOUT_SECONDS,
 } from '../utils/examLogic';
 import {
@@ -121,6 +124,8 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [wakeLockActive, setWakeLockActive] = useState<boolean>(false);
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState<boolean>(false);
+  const [amoledShiftStep, setAmoledShiftStep] = useState<number>(0);
+  const amoledTickCounterRef = useRef<number>(0);
 
   // Sync lock state to parent App so navigation tabs are hidden whenever timer is active
   useEffect(() => {
@@ -307,6 +312,13 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   tickRef.current = () => {
     if (isPaused) return;
 
+    if (settings.amoledAlwaysOnDisplay) {
+      amoledTickCounterRef.current += 1;
+      if (amoledTickCounterRef.current % 10 === 0) {
+        setAmoledShiftStep((step) => step + 1);
+      }
+    }
+
     if (phase === 'tutorial') {
       if (phaseRemainingSeconds <= 1) {
         playNotificationBell(settings.notificationTone, settings.notificationVolume);
@@ -432,6 +444,28 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   const circleRadius = 108;
   const circleCircumference = 2 * Math.PI * circleRadius;
   const strokeDashoffset = circleCircumference * (1 - progressFraction);
+
+  const isAmoled = Boolean(settings.amoledAlwaysOnDisplay);
+  const amoledDimmingRatio = settings.amoledDimmingRatio ?? 45;
+  const amoledState = calculateAmoledBurnInProtection(amoledShiftStep, amoledDimmingRatio);
+
+  const handleToggleAmoledMode = () => {
+    if (!onUpdateSettings) return;
+    const nextAmoled = !isAmoled;
+    onUpdateSettings({
+      ...settings,
+      amoledAlwaysOnDisplay: nextAmoled,
+      keepScreenAwake: nextAmoled ? true : settings.keepScreenAwake,
+    });
+  };
+
+  const handleChangeAmoledDimmingRatio = (nextRatio: number) => {
+    if (!onUpdateSettings) return;
+    onUpdateSettings({
+      ...settings,
+      amoledDimmingRatio: nextRatio,
+    });
+  };
 
   return (
     <div className="space-y-8">
@@ -764,19 +798,52 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
       {(phase === 'tutorial' || phase === 'block' || phase === 'break' || phase === 'decision_prompt') && (
         <div
           data-testid="fullscreen-exam-timer"
-          className="min-h-screen w-full flex flex-col bg-slate-50 dark:bg-slate-950"
+          data-amoled-active={isAmoled ? 'true' : 'false'}
+          className={`min-h-screen w-full flex flex-col relative overflow-hidden transition-colors duration-300 ${
+            isAmoled
+              ? 'bg-black text-zinc-200'
+              : 'bg-slate-50 dark:bg-slate-950'
+          }`}
         >
+          {/* Sub-pixel alternating checkerboard anti-burn-in mask when AMOLED mode is active */}
+          {isAmoled && (
+            <div
+              data-testid="amoled-subpixel-mask"
+              aria-hidden="true"
+              className="pointer-events-none fixed inset-0 z-20"
+              style={{
+                backgroundImage:
+                  'radial-gradient(rgba(0, 0, 0, 0.88) 1px, transparent 0)',
+                backgroundSize: '2px 2px',
+                backgroundPosition: `${amoledState.subpixelPhase}px ${amoledState.subpixelPhase}px`,
+                opacity: amoledState.pixelGridMaskOpacity,
+              }}
+            />
+          )}
+
           {/* Dedicated Full-Screen Exam Mode Header Bar (No Tab Navigation) */}
-          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4 shrink-0">
+          <div
+            className={`border-b px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4 shrink-0 transition-colors ${
+              isAmoled
+                ? 'bg-black border-zinc-900 text-zinc-300'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+            }`}
+          >
             <div className="flex items-center gap-3 min-w-0">
-              <span className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap">
+              <span
+                className={`text-base font-bold tracking-tight whitespace-nowrap ${
+                  isAmoled ? 'text-teal-400' : 'text-slate-900 dark:text-slate-100'
+                }`}
+              >
                 MedChronos
               </span>
               <span className="text-slate-300 dark:text-slate-700" aria-hidden="true">
                 ·
               </span>
-              <span className="text-xs font-medium text-teal-700 dark:text-teal-400 truncate">
-                Full-Screen Exam Lock Active — Navigation Disabled During Session
+              <span className="text-xs font-medium text-teal-600 dark:text-teal-400 truncate">
+                {isAmoled
+                  ? `AMOLED Always-On Active · Pixel Shift (${amoledState.offsetX}px, ${amoledState.offsetY}px)`
+                  : 'Full-Screen Exam Lock Active — Navigation Disabled During Session'}
               </span>
             </div>
 
@@ -784,11 +851,31 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
               {onUpdateSettings && (
                 <button
                   type="button"
+                  data-testid="header-amoled-quick-toggle"
+                  onClick={handleToggleAmoledMode}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                    isAmoled
+                      ? 'border-teal-500/70 bg-teal-950/60 text-teal-300 hover:bg-teal-900/50'
+                      : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-teal-500" />
+                  <span>{isAmoled ? 'AMOLED: ON' : 'AMOLED Display'}</span>
+                </button>
+              )}
+
+              {onUpdateSettings && (
+                <button
+                  type="button"
                   onClick={() =>
                     onUpdateSettings({ ...settings, darkMode: !settings.darkMode })
                   }
                   aria-label="Toggle Dark Mode"
-                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+                    isAmoled
+                      ? 'border-zinc-800 text-zinc-400 hover:bg-zinc-900'
+                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
                 >
                   {settings.darkMode ? (
                     <Sun className="w-4 h-4 text-amber-400" />
@@ -802,7 +889,11 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                 type="button"
                 onClick={toggleBrowserFullscreen}
                 aria-label={isBrowserFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                className={`px-3 py-1.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                  isAmoled
+                    ? 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'
+                    : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
               >
                 {isBrowserFullscreen ? (
                   <>
@@ -819,12 +910,149 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
             </div>
           </div>
 
-          <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 flex flex-col lg:justify-center">
+          <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5 flex flex-col lg:justify-center">
+            {/* ALWAYS-ON AMOLED DISPLAY & BURN-IN PROTECTION BAR (Visible on Running Timer) */}
+            <div
+              data-testid="amoled-timer-control-bar"
+              className={`rounded-2xl border p-4 transition-colors ${
+                isAmoled
+                  ? 'bg-black border-zinc-900 text-zinc-200'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                {/* Left: Toggle + Description */}
+                <div className="flex items-start sm:items-center justify-between lg:justify-start gap-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isAmoled}
+                      aria-label="Always-On AMOLED Display"
+                      data-testid="timer-amoled-toggle"
+                      onClick={handleToggleAmoledMode}
+                      className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
+                        isAmoled
+                          ? 'bg-teal-600'
+                          : 'bg-slate-300 dark:bg-slate-700'
+                      }`}
+                    >
+                      <span
+                        className={`block w-4 h-4 rounded-full bg-white transition-transform transform ${
+                          isAmoled ? 'translate-x-7' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-sm font-bold ${
+                            isAmoled
+                              ? 'text-teal-400'
+                              : 'text-slate-900 dark:text-slate-100'
+                          }`}
+                        >
+                          Always-On AMOLED Display
+                        </span>
+                        <span
+                          className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+                            isAmoled
+                              ? 'border-teal-800/80 bg-teal-950/50 text-teal-300'
+                              : 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          {isAmoled ? 'Burn-In Guard Active' : 'Standard LCD/OLED'}
+                        </span>
+                      </div>
+                      <p
+                        className={`text-xs mt-0.5 ${
+                          isAmoled
+                            ? 'text-zinc-400'
+                            : 'text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        True #000000 pixel-off canvas with 2D orbital pixel shifting and alternating sub-pixel interleaving to prevent OLED burn-in.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: On-Pixels Dimming Ratio Slider & Manual Pixel Shift */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 lg:gap-5 border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-200 dark:border-slate-800">
+                  <div className="flex-1 sm:w-64 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <label
+                        htmlFor="running-timer-dimming-slider"
+                        className={`font-semibold ${
+                          isAmoled
+                            ? 'text-zinc-300'
+                            : 'text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        On-Pixels Dimming Ratio
+                      </label>
+                      <span
+                        data-testid="amoled-dimming-value"
+                        className="font-mono font-bold text-teal-600 dark:text-teal-400 tabular-nums"
+                      >
+                        {amoledState.clampedDimmingRatio}% dimmed ({amoledState.onPixelBrightnessRatio}% lit)
+                      </span>
+                    </div>
+                    <input
+                      id="running-timer-dimming-slider"
+                      data-testid="timer-amoled-dimming-slider"
+                      type="range"
+                      min={10}
+                      max={85}
+                      step={5}
+                      value={amoledState.clampedDimmingRatio}
+                      onChange={(e) =>
+                        handleChangeAmoledDimmingRatio(Number(e.target.value))
+                      }
+                      className="w-full accent-teal-600 cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
+                    <div
+                      data-testid="amoled-pixel-offset-readout"
+                      className={`text-[11px] font-mono tabular-nums px-2.5 py-1.5 rounded-lg border ${
+                        isAmoled
+                          ? 'border-zinc-800 bg-zinc-950 text-teal-400'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      Shift: {amoledState.offsetX >= 0 ? `+${amoledState.offsetX}` : amoledState.offsetX}px,{' '}
+                      {amoledState.offsetY >= 0 ? `+${amoledState.offsetY}` : amoledState.offsetY}px · Subpixel P{amoledState.subpixelPhase}
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="amoled-shift-pixels-btn"
+                      onClick={() => setAmoledShiftStep((s) => s + 1)}
+                      title="Orbit active pixels immediately to prevent static diode wear"
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                        isAmoled
+                          ? 'border-zinc-800 bg-zinc-950 text-teal-400 hover:bg-zinc-900'
+                          : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <Move className="w-3.5 h-3.5" />
+                      <span>Shift Pixels</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Status Banner if present */}
             {statusBanner && (
               <div
                 role="status"
-                className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-xs sm:text-sm text-teal-900 dark:text-teal-200"
+                className={`flex items-center justify-between gap-4 px-4 py-3 rounded-xl border text-xs sm:text-sm ${
+                  isAmoled
+                    ? 'bg-black border-teal-900/70 text-teal-300'
+                    : 'bg-teal-50 dark:bg-teal-950/60 border-teal-200 dark:border-teal-800 text-teal-900 dark:text-teal-200'
+                }`}
               >
                 <div className="flex items-center gap-2.5">
                   <Bell className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
@@ -840,12 +1068,35 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
               </div>
             )}
 
-            {/* Main Simulator Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+            {/* Main Simulator Grid (Pixel-Shifted & On-Pixel Dimmed in AMOLED Mode) */}
+            <div
+              data-testid="amoled-pixel-shift-stage"
+              style={{
+                transform: isAmoled
+                  ? `translate3d(${amoledState.offsetX}px, ${amoledState.offsetY}px, 0)`
+                  : 'translate3d(0px, 0px, 0)',
+                opacity: isAmoled ? amoledState.activeLuminanceOpacity : 1,
+                transition:
+                  'transform 800ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease',
+              }}
+              className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch"
+            >
             {/* Left 7 Cols: Primary Countdown Clock & Controls */}
-            <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 flex flex-col justify-between space-y-6">
+            <div
+              className={`lg:col-span-7 border rounded-2xl p-6 sm:p-8 flex flex-col justify-between space-y-6 transition-colors ${
+                isAmoled
+                  ? 'bg-black border-zinc-900'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+              }`}
+            >
               {/* Top Meta Row */}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div
+                className={`flex flex-wrap items-center justify-between gap-2 border-b pb-4 ${
+                  isAmoled
+                    ? 'border-zinc-900'
+                    : 'border-slate-200 dark:border-slate-800'
+                }`}
+              >
                 <div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">
                     <span>{examPlan.examTitle}</span>
@@ -860,7 +1111,13 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                         : 'Standard Screen Timeout'}
                     </span>
                   </div>
-                  <h2 className="mt-1 text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
+                  <h2
+                    className={`mt-1 text-xl sm:text-2xl font-bold ${
+                      isAmoled
+                        ? 'text-zinc-100'
+                        : 'text-slate-900 dark:text-slate-100'
+                    }`}
+                  >
                     {phase === 'tutorial'
                       ? `Orientation Tutorial (${examPlan.tutorialMinutes}m)`
                       : phase === 'break'
@@ -873,7 +1130,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                   <span className="text-xs text-slate-500 dark:text-slate-400 block">
                     Available Break Pool
                   </span>
-                  <span className="text-lg font-bold text-teal-700 dark:text-teal-400">
+                  <span className="text-lg font-bold text-teal-600 dark:text-teal-400">
                     {formatSecondsToClock(breakPoolSeconds)}
                   </span>
                 </div>
@@ -889,8 +1146,12 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       r={circleRadius}
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth="10"
-                      className="text-slate-100 dark:text-slate-800"
+                      strokeWidth={isAmoled ? '4' : '10'}
+                      className={
+                        isAmoled
+                          ? 'text-zinc-900'
+                          : 'text-slate-100 dark:text-slate-800'
+                      }
                     />
                     <circle
                       cx="120"
@@ -898,7 +1159,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       r={circleRadius}
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth="10"
+                      strokeWidth={isAmoled ? '5' : '10'}
                       strokeLinecap="round"
                       strokeDasharray={circleCircumference}
                       strokeDashoffset={strokeDashoffset}
@@ -907,7 +1168,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                           ? 'text-amber-500 transition-all duration-300'
                           : phaseRemainingSeconds < 300
                           ? 'text-rose-600 transition-all duration-300'
-                          : 'text-teal-600 dark:text-teal-400 transition-all duration-300'
+                          : 'text-teal-500 dark:text-teal-400 transition-all duration-300'
                       }
                     />
                   </svg>
@@ -921,12 +1182,20 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                     </span>
                     <div
                       data-testid="active-timer-clock"
-                      className="mt-1 text-5xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100 tabular-nums"
+                      className={`mt-1 text-5xl font-bold font-mono tracking-tight tabular-nums ${
+                        isAmoled
+                          ? 'text-teal-400 font-light'
+                          : 'text-slate-900 dark:text-slate-100'
+                      }`}
                     >
                       {formatSecondsToClock(currentClockSec)}
                     </div>
                     <span className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-                      {isPaused ? 'Timer Paused' : 'Counting Down Live'}
+                      {isPaused
+                        ? 'Timer Paused'
+                        : isAmoled
+                        ? `AMOLED Burn-In Safe · ${amoledState.onPixelBrightnessRatio}% Lum`
+                        : 'Counting Down Live'}
                     </span>
                   </div>
                 </div>
@@ -1018,24 +1287,48 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
             </div>
 
             {/* Right 5 Cols: Live Question Pacing & Block Timeline */}
-            <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 flex flex-col justify-between space-y-6">
+            <div
+              className={`lg:col-span-5 border rounded-2xl p-6 sm:p-8 flex flex-col justify-between space-y-6 transition-colors ${
+                isAmoled
+                  ? 'bg-black border-zinc-900'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+              }`}
+            >
               {/* Question Pacing Assistant */}
               <div className="space-y-4">
-                <div className="border-b border-slate-200 dark:border-slate-800 pb-3 flex items-center justify-between gap-3">
+                <div
+                  className={`border-b pb-3 flex items-center justify-between gap-3 ${
+                    isAmoled
+                      ? 'border-zinc-900'
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                >
                   <div>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    <h3
+                      className={`text-base font-bold ${
+                        isAmoled
+                          ? 'text-zinc-100'
+                          : 'text-slate-900 dark:text-slate-100'
+                      }`}
+                    >
                       Intuitive Question Pacing Tracker
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Target cadence: {examPlan.secondsPerQuestion}s per question
                     </p>
                   </div>
-                  <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 tabular-nums whitespace-nowrap shrink-0">
+                  <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-300 tabular-nums whitespace-nowrap shrink-0">
                     Q {currentQuestionInBlock} / {activeBlock.questionCount}
                   </span>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div
+                  className={`p-4 rounded-xl border space-y-3 ${
+                    isAmoled
+                      ? 'bg-black border-zinc-900'
+                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                  }`}
+                >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Current Question</span>
                     <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">

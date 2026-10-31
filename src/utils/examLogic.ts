@@ -331,3 +331,50 @@ export function resolvePostBlockDecision(
     autoContinuedWithoutBreak: choice === 'timeout_auto_continue',
   };
 }
+
+export interface AmoledBurnInProtectionState {
+  offsetX: number;
+  offsetY: number;
+  subpixelPhase: 0 | 1;
+  clampedDimmingRatio: number;
+  onPixelBrightnessRatio: number;
+  activeLuminanceOpacity: number;
+  pixelGridMaskOpacity: number;
+}
+
+/**
+ * Computes deterministic 2D Lissajous pixel-orbiting offsets, sub-pixel checkerboard phase,
+ * and on-pixel luminance dimming ratios to prevent OLED/AMOLED organic diode burn-in
+ * during multi-hour board exam sessions.
+ */
+export function calculateAmoledBurnInProtection(
+  stepIndex: number,
+  dimmingRatioPercent: number
+): AmoledBurnInProtectionState {
+  const safeStep = Math.max(0, Math.floor(stepIndex));
+  // Clamp dimming ratio between 10% (90% brightness) and 85% (15% brightness) so text never vanishes completely
+  const clampedDimmingRatio = Math.min(85, Math.max(10, Math.round(dimmingRatioPercent)));
+  const onPixelBrightnessRatio = Math.round((100 - clampedDimmingRatio) * 10) / 10;
+  const activeLuminanceOpacity = Math.round(((100 - clampedDimmingRatio) / 100) * 100) / 100;
+
+  // 2D orbital pixel shift across a non-repeating 24-step cycle (±18px X, ±22px Y)
+  const angleX = (safeStep * 2 * Math.PI) / 12;
+  const angleY = (safeStep * 2 * Math.PI) / 16;
+  const offsetX = Math.round(Math.sin(angleX) * 18);
+  const offsetY = Math.round(Math.cos(angleY) * 22);
+
+  // Alternate sub-pixel checkerboard phase (0 or 1) so adjacent pixels take turns resting
+  const subpixelPhase: 0 | 1 = (safeStep % 2) as 0 | 1;
+  const pixelGridMaskOpacity = Math.min(0.75, Math.max(0.1, (clampedDimmingRatio / 100) * 0.65));
+
+  return {
+    offsetX,
+    offsetY,
+    subpixelPhase,
+    clampedDimmingRatio,
+    onPixelBrightnessRatio,
+    activeLuminanceOpacity,
+    pixelGridMaskOpacity,
+  };
+}
+

@@ -6,6 +6,7 @@ import {
   resolvePostBlockDecision,
   formatMinutesToHoursAndMinutes,
   formatSecondsToClock,
+  calculateAmoledBurnInProtection,
   DEFAULT_DECISION_TIMEOUT_SECONDS,
 } from './examLogic';
 
@@ -75,3 +76,23 @@ test('Clock and duration formatting utilities format accurately', () => {
   assert.equal(formatSecondsToClock(1800), '30:00');
   assert.equal(formatSecondsToClock(3665), '01:01:05');
 });
+
+test('AMOLED burn-in protection shifts pixel coordinates and computes dimming ratios', () => {
+  const step0 = calculateAmoledBurnInProtection(0, 50);
+  const step3 = calculateAmoledBurnInProtection(3, 50);
+
+  assert.equal(step0.clampedDimmingRatio, 50);
+  assert.equal(step0.onPixelBrightnessRatio, 50);
+  assert.equal(step0.activeLuminanceOpacity, 0.5);
+  assert.equal(step0.subpixelPhase, 0);
+  assert.equal(step3.subpixelPhase, 1);
+  // Coordinates shift between steps so pixels never stay static
+  assert.notEqual(step0.offsetX, step3.offsetX);
+  assert.notEqual(step0.offsetY, step3.offsetY);
+
+  // Clamping works for extreme dimming inputs
+  const clampedHigh = calculateAmoledBurnInProtection(1, 99);
+  assert.equal(clampedHigh.clampedDimmingRatio, 85);
+  assert.equal(clampedHigh.activeLuminanceOpacity, 0.15);
+});
+

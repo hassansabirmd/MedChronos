@@ -205,6 +205,64 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
             </button>
           </div>
 
+          {/* 3b. Always-On AMOLED Display & Pixel Burn-In Protection */}
+          <div className="space-y-3 py-3 border-t border-slate-200/70 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Always-On AMOLED Display (Running Timer)
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Uses a true #000000 black pixel-off canvas, 2D orbital pixel shifting, and sub-pixel checkerboard interleaving to prevent OLED burn-in.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.amoledAlwaysOnDisplay}
+                aria-label="Enable Always-On AMOLED Display"
+                onClick={() =>
+                  onUpdateSettings({
+                    ...settings,
+                    amoledAlwaysOnDisplay: !settings.amoledAlwaysOnDisplay,
+                  })
+                }
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                  settings.amoledAlwaysOnDisplay ? 'bg-teal-600' : 'bg-slate-300 dark:bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition-transform ${
+                    settings.amoledAlwaysOnDisplay ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between text-xs font-medium text-slate-600 dark:text-slate-400">
+                <label htmlFor="settings-amoled-dimming-range">
+                  On-Pixels Dimming Ratio ({settings.amoledDimmingRatio ?? 45}% dimmed · {100 - (settings.amoledDimmingRatio ?? 45)}% active luminance)
+                </label>
+              </div>
+              <input
+                id="settings-amoled-dimming-range"
+                type="range"
+                min={10}
+                max={85}
+                step={5}
+                value={settings.amoledDimmingRatio ?? 45}
+                onChange={(e) =>
+                  onUpdateSettings({
+                    ...settings,
+                    amoledDimmingRatio: Number(e.target.value),
+                  })
+                }
+                className="mt-2 w-full accent-teal-600 cursor-pointer"
+              />
+            </div>
+          </div>
+
           {/* 4. Notification Sound Settings */}
           <div className="space-y-4 pt-3 border-t border-slate-200/70 dark:border-slate-800">
             <div className="flex items-center justify-between">

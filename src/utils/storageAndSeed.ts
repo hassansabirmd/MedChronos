@@ -35,6 +35,8 @@ export interface AppSettings {
   notificationVolume: number; // 0 - 100
   vibrateDuringBreak: boolean;
   keepScreenAwake: boolean;
+  amoledAlwaysOnDisplay: boolean;
+  amoledDimmingRatio: number; // 10 - 85 (% dimming applied to on-pixels)
   autoContinueTimeoutSeconds: number; // default 60s per USMLE regulation prompt
   targetExamDate: string;
   targetPercentileGoal: number;
@@ -52,6 +54,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationVolume: 85,
   vibrateDuringBreak: true,
   keepScreenAwake: true,
+  amoledAlwaysOnDisplay: false,
+  amoledDimmingRatio: 45,
   autoContinueTimeoutSeconds: 60,
   targetExamDate: '2026-12-15',
   targetPercentileGoal: 85,
