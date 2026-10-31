@@ -20,6 +20,8 @@ import {
   Minimize2,
   Smartphone,
   Move,
+  Settings,
+  X,
 } from 'lucide-react';
 import {
   EXAM_PROFILES,
@@ -125,6 +127,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   const [wakeLockActive, setWakeLockActive] = useState<boolean>(false);
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState<boolean>(false);
   const [amoledShiftStep, setAmoledShiftStep] = useState<number>(0);
+  const [isTimerSettingsModalOpen, setIsTimerSettingsModalOpen] = useState<boolean>(false);
   const amoledTickCounterRef = useRef<number>(0);
 
   // Sync lock state to parent App so navigation tabs are hidden whenever timer is active
@@ -132,8 +135,11 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
     if (onSessionLockChange) {
       onSessionLockChange(phase !== 'setup');
     }
-    if (phase === 'setup' && typeof document !== 'undefined' && document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
+    if (phase === 'setup') {
+      setIsTimerSettingsModalOpen(false);
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      }
     }
   }, [phase, onSessionLockChange]);
 
@@ -446,6 +452,8 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   const strokeDashoffset = circleCircumference * (1 - progressFraction);
 
   const isAmoled = Boolean(settings.amoledAlwaysOnDisplay);
+  const isAmoledBwTheme = settings.timerScreenTheme === 'amoled_bw';
+  const isPitchBlackCanvas = isAmoled || isAmoledBwTheme;
   const amoledDimmingRatio = settings.amoledDimmingRatio ?? 45;
   const amoledState = calculateAmoledBurnInProtection(amoledShiftStep, amoledDimmingRatio);
 
@@ -794,13 +802,16 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
         </div>
       )}
 
-      {/* ACTIVE EXAM TIMER VIEW (Full-Screen Locked Exam Mode — No Tab Switching Allowed) */}
+      {/* ACTIVE EXAM TIMER VIEW (Full-Screen Locked Exam Mode — No Top Bar, Only Top-Right Controls) */}
       {(phase === 'tutorial' || phase === 'block' || phase === 'break' || phase === 'decision_prompt') && (
         <div
           data-testid="fullscreen-exam-timer"
           data-amoled-active={isAmoled ? 'true' : 'false'}
-          className={`min-h-screen w-full flex flex-col relative overflow-hidden transition-colors duration-300 ${
-            isAmoled
+          data-timer-theme={settings.timerScreenTheme ?? 'default'}
+          className={`min-h-screen w-full flex flex-col justify-center relative overflow-hidden transition-colors duration-300 ${
+            isAmoledBwTheme
+              ? 'bg-black text-white'
+              : isAmoled
               ? 'bg-black text-zinc-200'
               : 'bg-slate-50 dark:bg-slate-950'
           }`}
@@ -821,109 +832,616 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
             />
           )}
 
-          {/* Dedicated Full-Screen Exam Mode Header Bar (No Tab Navigation) */}
+          {/* Top-Right Floating Controls ONLY (Settings Icon + Minimize/Maximize Icon — No Top Bar) */}
           <div
-            className={`border-b px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4 shrink-0 transition-colors ${
-              isAmoled
-                ? 'bg-black border-zinc-900 text-zinc-300'
-                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-            }`}
+            data-testid="timer-top-right-controls"
+            className="fixed top-4 right-4 z-30 flex items-center gap-2"
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <span
-                className={`text-base font-bold tracking-tight whitespace-nowrap ${
-                  isAmoled ? 'text-teal-400' : 'text-slate-900 dark:text-slate-100'
+            <button
+              type="button"
+              data-testid="timer-top-right-settings-btn"
+              onClick={() => setIsTimerSettingsModalOpen(true)}
+              aria-label="Open Question Pacing and Always-On Display Settings"
+              title="Question Pacing Tracker & Always-On Display Settings"
+              className={`p-2.5 rounded-xl border transition-colors cursor-pointer shadow-xs ${
+                isAmoledBwTheme
+                  ? 'bg-black border-white/60 text-white hover:bg-zinc-900'
+                  : isAmoled
+                  ? 'bg-black border-zinc-800 text-teal-400 hover:bg-zinc-900'
+                  : 'bg-white/90 dark:bg-slate-900/90 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              data-testid="timer-top-right-fullscreen-btn"
+              onClick={toggleBrowserFullscreen}
+              aria-label={isBrowserFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              title={isBrowserFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              className={`p-2.5 rounded-xl border transition-colors cursor-pointer shadow-xs inline-flex items-center gap-1.5 ${
+                isAmoledBwTheme
+                  ? 'bg-black border-white/60 text-white hover:bg-zinc-900'
+                  : isAmoled
+                  ? 'bg-black border-zinc-800 text-zinc-200 hover:bg-zinc-900'
+                  : 'bg-white/90 dark:bg-slate-900/90 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {isBrowserFullscreen ? (
+                <Minimize2 className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+
+          <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-12 space-y-5 flex flex-col justify-center">
+            {/* Status Banner if present */}
+            {statusBanner && (
+              <div
+                role="status"
+                className={`flex items-center justify-between gap-4 px-4 py-3 rounded-xl border text-xs sm:text-sm ${
+                  isAmoledBwTheme
+                    ? 'bg-black border-white/50 text-white'
+                    : isAmoled
+                    ? 'bg-black border-teal-900/70 text-teal-300'
+                    : 'bg-teal-50 dark:bg-teal-950/60 border-teal-200 dark:border-teal-800 text-teal-900 dark:text-teal-200'
                 }`}
               >
-                MedChronos
-              </span>
-              <span className="text-slate-300 dark:text-slate-700" aria-hidden="true">
-                ·
-              </span>
-              <span className="text-xs font-medium text-teal-600 dark:text-teal-400 truncate">
-                {isAmoled
-                  ? `AMOLED Always-On Active · Pixel Shift (${amoledState.offsetX}px, ${amoledState.offsetY}px)`
-                  : 'Full-Screen Exam Lock Active — Navigation Disabled During Session'}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              {onUpdateSettings && (
+                <div className="flex items-center gap-2.5">
+                  <Bell
+                    className={`w-4 h-4 shrink-0 ${
+                      isAmoledBwTheme
+                        ? 'text-white'
+                        : 'text-teal-600 dark:text-teal-400'
+                    }`}
+                  />
+                  <span>{statusBanner}</span>
+                </div>
                 <button
                   type="button"
-                  data-testid="header-amoled-quick-toggle"
-                  onClick={handleToggleAmoledMode}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    isAmoled
-                      ? 'border-teal-500/70 bg-teal-950/60 text-teal-300 hover:bg-teal-900/50'
-                      : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
+                  onClick={() => setStatusBanner(null)}
+                  className="text-xs font-semibold underline shrink-0 cursor-pointer"
                 >
-                  <Smartphone className="w-3.5 h-3.5 text-teal-500" />
-                  <span>{isAmoled ? 'AMOLED: ON' : 'AMOLED Display'}</span>
+                  Dismiss
                 </button>
-              )}
+              </div>
+            )}
 
-              {onUpdateSettings && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onUpdateSettings({ ...settings, darkMode: !settings.darkMode })
-                  }
-                  aria-label="Toggle Dark Mode"
-                  className={`p-2 rounded-lg border transition-colors cursor-pointer ${
-                    isAmoled
-                      ? 'border-zinc-800 text-zinc-400 hover:bg-zinc-900'
-                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            {/* Primary Countdown Clock & Controls Card (Pixel-Shifted & Dimmed in AMOLED Mode) */}
+            <div
+              data-testid="amoled-pixel-shift-stage"
+              style={{
+                transform: isAmoled
+                  ? `translate3d(${amoledState.offsetX}px, ${amoledState.offsetY}px, 0)`
+                  : 'translate3d(0px, 0px, 0)',
+                opacity: isAmoled ? amoledState.activeLuminanceOpacity : 1,
+                transition:
+                  'transform 800ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease',
+              }}
+              className="w-full"
+            >
+              <div
+                className={`border rounded-2xl p-6 sm:p-10 flex flex-col justify-between space-y-8 transition-colors ${
+                  isAmoledBwTheme
+                    ? 'bg-black border-white/40 text-white'
+                    : isAmoled
+                    ? 'bg-black border-zinc-900'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                }`}
+              >
+                {/* Top Meta Row */}
+                <div
+                  className={`flex flex-wrap items-center justify-between gap-2 border-b pb-4 ${
+                    isAmoledBwTheme
+                      ? 'border-white/25'
+                      : isAmoled
+                      ? 'border-zinc-900'
+                      : 'border-slate-200 dark:border-slate-800'
                   }`}
                 >
-                  {settings.darkMode ? (
-                    <Sun className="w-4 h-4 text-amber-400" />
-                  ) : (
-                    <Moon className="w-4 h-4" />
+                  <div>
+                    <div
+                      className={`text-xs ${
+                        isAmoledBwTheme
+                          ? 'text-zinc-300'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      <span>{examPlan.examTitle}</span>
+                      <span aria-hidden="true"> · </span>
+                      <span>{examPlan.profile.name}</span>
+                      <span aria-hidden="true"> · </span>
+                      <span>
+                        {settings.keepScreenAwake
+                          ? wakeLockActive
+                            ? 'Screen Wake Lock Active'
+                            : 'Keep Screen Awake Enabled'
+                          : 'Standard Screen Timeout'}
+                      </span>
+                    </div>
+                    <h2
+                      className={`mt-1 text-xl sm:text-2xl font-bold ${
+                        isAmoledBwTheme
+                          ? 'text-white'
+                          : isAmoled
+                          ? 'text-zinc-100'
+                          : 'text-slate-900 dark:text-slate-100'
+                      }`}
+                    >
+                      {phase === 'tutorial'
+                        ? `Orientation Tutorial (${examPlan.tutorialMinutes}m)`
+                        : phase === 'break'
+                        ? `Scheduled Break Pool (Before Block ${currentBlockIndex + 2})`
+                        : `Block ${currentBlockIndex + 1} of ${examPlan.numBlocks} (${activeBlock.questionCount} Questions)`}
+                    </h2>
+                  </div>
+
+                  <div className="text-right font-mono tabular-nums">
+                    <span
+                      className={`text-xs block ${
+                        isAmoledBwTheme
+                          ? 'text-zinc-300'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      Available Break Pool
+                    </span>
+                    <span
+                      className={`text-lg font-bold ${
+                        isAmoledBwTheme
+                          ? 'text-white'
+                          : 'text-teal-600 dark:text-teal-400'
+                      }`}
+                    >
+                      {formatSecondsToClock(breakPoolSeconds)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Center Circular Progress & Tabular Countdown */}
+                <div className="flex flex-col items-center justify-center py-2">
+                  <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 240 240">
+                      <circle
+                        cx="120"
+                        cy="120"
+                        r={circleRadius}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={isPitchBlackCanvas ? '4' : '10'}
+                        className={
+                          isAmoledBwTheme
+                            ? 'text-zinc-800'
+                            : isAmoled
+                            ? 'text-zinc-900'
+                            : 'text-slate-100 dark:text-slate-800'
+                        }
+                      />
+                      <circle
+                        cx="120"
+                        cy="120"
+                        r={circleRadius}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={isPitchBlackCanvas ? '5' : '10'}
+                        strokeLinecap="round"
+                        strokeDasharray={circleCircumference}
+                        strokeDashoffset={strokeDashoffset}
+                        className={
+                          isAmoledBwTheme
+                            ? 'text-white transition-all duration-300'
+                            : phase === 'break'
+                            ? 'text-amber-500 transition-all duration-300'
+                            : phaseRemainingSeconds < 300
+                            ? 'text-rose-600 transition-all duration-300'
+                            : 'text-teal-500 dark:text-teal-400 transition-all duration-300'
+                        }
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                      <span
+                        className={`text-xs uppercase tracking-wider font-semibold ${
+                          isAmoledBwTheme
+                            ? 'text-zinc-300'
+                            : 'text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        {phase === 'tutorial'
+                          ? 'Tutorial Remaining'
+                          : phase === 'break'
+                          ? 'Break Remaining'
+                          : 'Block Time Left'}
+                      </span>
+                      <div
+                        data-testid="active-timer-clock"
+                        className={`mt-1 text-5xl sm:text-6xl font-bold font-mono tracking-tight tabular-nums ${
+                          isAmoledBwTheme
+                            ? 'text-white font-light'
+                            : isAmoled
+                            ? 'text-teal-400 font-light'
+                            : 'text-slate-900 dark:text-slate-100'
+                        }`}
+                      >
+                        {formatSecondsToClock(currentClockSec)}
+                      </div>
+                      <span
+                        className={`mt-1.5 text-xs font-mono tabular-nums ${
+                          isAmoledBwTheme
+                            ? 'text-zinc-300'
+                            : 'text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        {isPaused
+                          ? 'Timer Paused'
+                          : isAmoled
+                          ? `AMOLED Burn-In Safe · ${amoledState.onPixelBrightnessRatio}% Lum`
+                          : isAmoledBwTheme
+                          ? 'AMOLED Black & White Theme'
+                          : 'Counting Down Live'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Controls Bar */}
+                <div
+                  className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-4 border-t ${
+                    isAmoledBwTheme
+                      ? 'border-white/25'
+                      : isAmoled
+                      ? 'border-zinc-900'
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setIsPaused((p) => !p)}
+                    className={`py-2.5 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                      isAmoledBwTheme
+                        ? 'bg-white text-black hover:bg-zinc-200'
+                        : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900'
+                    }`}
+                  >
+                    {isPaused ? (
+                      <Play className="w-3.5 h-3.5 shrink-0" />
+                    ) : (
+                      <Pause className="w-3.5 h-3.5 shrink-0" />
+                    )}
+                    <span>{isPaused ? 'Resume Timer' : 'Pause Timer'}</span>
+                  </button>
+
+                  {phase === 'tutorial' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBreakPoolSeconds((b) => b + phaseRemainingSeconds);
+                        setPhase('block');
+                        setCurrentBlockIndex(0);
+                        setPhaseRemainingSeconds(examPlan.blocks[0].durationSeconds);
+                        setStatusBanner(
+                          `Tutorial ended early. +${formatSecondsToClock(
+                            phaseRemainingSeconds
+                          )} added to break bank.`
+                        );
+                      }}
+                      className={`py-2.5 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                        isAmoledBwTheme
+                          ? 'border border-white bg-black text-white hover:bg-zinc-900'
+                          : 'bg-teal-600 hover:bg-teal-700 text-white'
+                      }`}
+                    >
+                      <SkipForward className="w-3.5 h-3.5 shrink-0" />
+                      <span>Start Block 1</span>
+                    </button>
                   )}
-                </button>
-              )}
 
-              <button
-                type="button"
-                onClick={toggleBrowserFullscreen}
-                aria-label={isBrowserFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                  isAmoled
-                    ? 'border-zinc-800 text-zinc-300 hover:bg-zinc-900'
-                    : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                {isBrowserFullscreen ? (
-                  <>
-                    <Minimize2 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Exit Fullscreen</span>
-                  </>
-                ) : (
-                  <>
-                    <Maximize2 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Fullscreen</span>
-                  </>
-                )}
-              </button>
+                  {phase === 'block' && (
+                    <button
+                      type="button"
+                      onClick={() => triggerBlockCompletion(phaseRemainingSeconds)}
+                      className={`py-2.5 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                        isAmoledBwTheme
+                          ? 'border border-white bg-black text-white hover:bg-zinc-900'
+                          : 'bg-teal-600 hover:bg-teal-700 text-white'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Complete Block Early</span>
+                    </button>
+                  )}
+
+                  {phase === 'break' && (
+                    <button
+                      type="button"
+                      onClick={resumeBlockFromBreak}
+                      className={`py-2.5 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                        isAmoledBwTheme
+                          ? 'border border-white bg-black text-white hover:bg-zinc-900'
+                          : 'bg-teal-600 hover:bg-teal-700 text-white'
+                      }`}
+                    >
+                      <Play className="w-3.5 h-3.5 shrink-0" />
+                      <span>Start Next Block</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (phase === 'break') {
+                        setBreakPoolSeconds((s) => Math.max(3, s - 300));
+                      } else {
+                        setPhaseRemainingSeconds(3);
+                      }
+                    }}
+                    title="Jump to final 3 seconds to test end-of-block bell and prompt"
+                    className={`py-2.5 px-3 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                      isAmoledBwTheme
+                        ? 'border-white/50 text-white hover:bg-zinc-900'
+                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <FastForward className="w-3.5 h-3.5 shrink-0" />
+                    <span>Jump to Final 3s</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playNotificationBell(
+                        settings.notificationTone,
+                        settings.notificationVolume
+                      );
+                      setPhase('percentile_entry');
+                    }}
+                    aria-label="Finish Exam & Log Score"
+                    className={`py-2.5 px-3 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                      isAmoledBwTheme
+                        ? 'border-white/50 text-white hover:bg-zinc-900'
+                        : 'border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+                    }`}
+                  >
+                    <Flag className="w-3.5 h-3.5 shrink-0" />
+                    <span>Finish & Log Score</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5 flex flex-col lg:justify-center">
-            {/* ALWAYS-ON AMOLED DISPLAY & BURN-IN PROTECTION BAR (Visible on Running Timer) */}
+          {/* POPUP MODAL FOR QUESTION PACING TRACKER & ALWAYS-ON DISPLAY SETTINGS (Triggered by Top-Right Settings Icon) */}
+          {isTimerSettingsModalOpen && (
             <div
-              data-testid="amoled-timer-control-bar"
-              className={`rounded-2xl border p-4 transition-colors ${
-                isAmoled
-                  ? 'bg-black border-zinc-900 text-zinc-200'
-                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-              }`}
+              data-testid="timer-tools-popup-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="timer-tools-modal-title"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 overflow-y-auto"
             >
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                {/* Left: Toggle + Description */}
-                <div className="flex items-start sm:items-center justify-between lg:justify-start gap-4">
-                  <div className="flex items-center gap-3">
+              <div
+                className={`w-full max-w-2xl rounded-2xl border p-6 sm:p-8 shadow-2xl space-y-6 my-8 ${
+                  isPitchBlackCanvas
+                    ? 'bg-black border-zinc-700 text-white'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100'
+                }`}
+              >
+                {/* Modal Header */}
+                <div
+                  className={`flex items-center justify-between gap-4 border-b pb-4 ${
+                    isPitchBlackCanvas
+                      ? 'border-zinc-800'
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div>
+                    <span
+                      className={`text-xs font-semibold ${
+                        isAmoledBwTheme
+                          ? 'text-zinc-300'
+                          : 'text-teal-600 dark:text-teal-400'
+                      }`}
+                    >
+                      In-Session Controls & Display Protection
+                    </span>
+                    <h3 id="timer-tools-modal-title" className="text-xl font-bold mt-0.5">
+                      Question Pacing & Always-On AMOLED Settings
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="close-timer-tools-modal-btn"
+                    onClick={() => setIsTimerSettingsModalOpen(false)}
+                    aria-label="Close Settings Popup"
+                    className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+                      isPitchBlackCanvas
+                        ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-900'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Card 1: Intuitive Question Pacing Tracker Card */}
+                <div
+                  data-testid="popup-question-pacing-card"
+                  className={`rounded-2xl border p-5 space-y-4 ${
+                    isPitchBlackCanvas
+                      ? 'bg-black border-zinc-800'
+                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div
+                    className={`border-b pb-3 flex items-center justify-between gap-3 ${
+                      isPitchBlackCanvas
+                        ? 'border-zinc-800'
+                        : 'border-slate-200 dark:border-slate-800'
+                    }`}
+                  >
+                    <div>
+                      <h4 className="text-base font-bold">
+                        Intuitive Question Pacing Tracker
+                      </h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Target cadence: {examPlan.secondsPerQuestion}s per question
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono font-semibold tabular-nums whitespace-nowrap shrink-0">
+                      Q {currentQuestionInBlock} / {activeBlock.questionCount}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      Current Question
+                    </span>
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                      <button
+                        type="button"
+                        aria-label="Previous question"
+                        onClick={() => setCurrentQuestionInBlock((q) => Math.max(1, q - 1))}
+                        className="p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="w-10 text-center font-mono font-bold text-base tabular-nums">
+                        {currentQuestionInBlock}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Next question"
+                        onClick={() =>
+                          setCurrentQuestionInBlock((q) =>
+                            Math.min(activeBlock.questionCount, q + 1)
+                          )
+                        }
+                        className="p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCurrentQuestionInBlock((q) =>
+                            Math.min(activeBlock.questionCount, q + 5)
+                          )
+                        }
+                        className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-semibold hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer whitespace-nowrap shrink-0"
+                      >
+                        +5 Qs
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`grid grid-cols-2 gap-3 pt-2 border-t text-xs ${
+                      isPitchBlackCanvas
+                        ? 'border-zinc-800'
+                        : 'border-slate-200/70 dark:border-slate-800'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400 block">
+                        Time Per Remaining Q
+                      </span>
+                      <span className="font-mono font-bold text-sm tabular-nums">
+                        {pacing.secondsRemainingPerQuestion}s / question
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400 block">
+                        Pacing Status
+                      </span>
+                      <span
+                        className={`font-semibold ${
+                          isAmoledBwTheme
+                            ? 'text-white'
+                            : pacing.status === 'behind'
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-teal-700 dark:text-teal-400'
+                        }`}
+                      >
+                        {pacing.message}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Block Sequence Summary inside Pacing Card */}
+                  <div
+                    className={`pt-3 border-t space-y-2 ${
+                      isPitchBlackCanvas
+                        ? 'border-zinc-800'
+                        : 'border-slate-200/70 dark:border-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold">
+                        Exam Block Sequence ({examPlan.numBlocks} Blocks)
+                      </span>
+                      <span className="font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                        {blocksCompletedCount} of {examPlan.numBlocks} completed
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-5 sm:grid-cols-7 gap-1.5 max-h-28 overflow-y-auto pr-1">
+                      {examPlan.blocks.map((blk, idx) => {
+                        const isCompleted =
+                          idx < currentBlockIndex ||
+                          (idx === currentBlockIndex && phase === 'decision_prompt');
+                        const isCurrent = idx === currentBlockIndex && phase === 'block';
+                        return (
+                          <div
+                            key={blk.blockNumber}
+                            className={`p-1.5 rounded-lg border text-center font-mono text-[11px] tabular-nums ${
+                              isCurrent
+                                ? isAmoledBwTheme
+                                  ? 'border-white bg-white text-black font-bold'
+                                  : 'border-teal-600 bg-teal-50 dark:border-teal-400 dark:bg-teal-950/50 text-teal-900 dark:text-teal-200 font-bold'
+                                : isCompleted
+                                ? 'border-slate-200 dark:border-slate-800 opacity-60'
+                                : 'border-slate-200/60 dark:border-slate-800/60 opacity-40'
+                            }`}
+                          >
+                            B{blk.blockNumber} · {blk.durationMinutes}m
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 2: Always-On AMOLED Display Settings Card */}
+                <div
+                  data-testid="amoled-timer-control-bar"
+                  className={`rounded-2xl border p-5 space-y-4 ${
+                    isPitchBlackCanvas
+                      ? 'bg-black border-zinc-800'
+                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-base font-bold">
+                          Always-On AMOLED Display
+                        </h4>
+                        <span
+                          className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+                            isAmoled
+                              ? isAmoledBwTheme
+                                ? 'border-white text-white'
+                                : 'border-teal-800/80 bg-teal-950/50 text-teal-300'
+                              : 'border-slate-200 dark:border-slate-700 text-slate-500'
+                          }`}
+                        >
+                          {isAmoled ? 'Burn-In Guard Active' : 'Off'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        True #000000 pixel-off canvas with 2D orbital pixel shifting and alternating sub-pixel interleaving to prevent OLED burn-in.
+                      </p>
+                    </div>
                     <button
                       type="button"
                       role="switch"
@@ -933,67 +1451,36 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       onClick={handleToggleAmoledMode}
                       className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
                         isAmoled
-                          ? 'bg-teal-600'
+                          ? isAmoledBwTheme
+                            ? 'bg-white'
+                            : 'bg-teal-600'
                           : 'bg-slate-300 dark:bg-slate-700'
                       }`}
                     >
                       <span
-                        className={`block w-4 h-4 rounded-full bg-white transition-transform transform ${
-                          isAmoled ? 'translate-x-7' : 'translate-x-1'
+                        className={`block w-4 h-4 rounded-full transition-transform transform ${
+                          isAmoled
+                            ? isAmoledBwTheme
+                              ? 'translate-x-7 bg-black'
+                              : 'translate-x-7 bg-white'
+                            : 'translate-x-1 bg-white'
                         }`}
                       />
                     </button>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-sm font-bold ${
-                            isAmoled
-                              ? 'text-teal-400'
-                              : 'text-slate-900 dark:text-slate-100'
-                          }`}
-                        >
-                          Always-On AMOLED Display
-                        </span>
-                        <span
-                          className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
-                            isAmoled
-                              ? 'border-teal-800/80 bg-teal-950/50 text-teal-300'
-                              : 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          {isAmoled ? 'Burn-In Guard Active' : 'Standard LCD/OLED'}
-                        </span>
-                      </div>
-                      <p
-                        className={`text-xs mt-0.5 ${
-                          isAmoled
-                            ? 'text-zinc-400'
-                            : 'text-slate-500 dark:text-slate-400'
-                        }`}
-                      >
-                        True #000000 pixel-off canvas with 2D orbital pixel shifting and alternating sub-pixel interleaving to prevent OLED burn-in.
-                      </p>
-                    </div>
                   </div>
-                </div>
 
-                {/* Right: On-Pixels Dimming Ratio Slider & Manual Pixel Shift */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 lg:gap-5 border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-200 dark:border-slate-800">
-                  <div className="flex-1 sm:w-64 space-y-1">
+                  {/* On-Pixels Dimming Ratio Slider */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-200/70 dark:border-slate-800">
                     <div className="flex items-center justify-between text-xs">
                       <label
                         htmlFor="running-timer-dimming-slider"
-                        className={`font-semibold ${
-                          isAmoled
-                            ? 'text-zinc-300'
-                            : 'text-slate-700 dark:text-slate-300'
-                        }`}
+                        className="font-semibold"
                       >
                         On-Pixels Dimming Ratio
                       </label>
                       <span
                         data-testid="amoled-dimming-value"
-                        className="font-mono font-bold text-teal-600 dark:text-teal-400 tabular-nums"
+                        className="font-mono font-bold tabular-nums"
                       >
                         {amoledState.clampedDimmingRatio}% dimmed ({amoledState.onPixelBrightnessRatio}% lit)
                       </span>
@@ -1013,14 +1500,11 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                     />
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
+                  {/* Pixel Shift Controls */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-800">
                     <div
                       data-testid="amoled-pixel-offset-readout"
-                      className={`text-[11px] font-mono tabular-nums px-2.5 py-1.5 rounded-lg border ${
-                        isAmoled
-                          ? 'border-zinc-800 bg-zinc-950 text-teal-400'
-                          : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400'
-                      }`}
+                      className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400"
                     >
                       Shift: {amoledState.offsetX >= 0 ? `+${amoledState.offsetX}` : amoledState.offsetX}px,{' '}
                       {amoledState.offsetY >= 0 ? `+${amoledState.offsetY}` : amoledState.offsetY}px · Subpixel P{amoledState.subpixelPhase}
@@ -1029,421 +1513,48 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       type="button"
                       data-testid="amoled-shift-pixels-btn"
                       onClick={() => setAmoledShiftStep((s) => s + 1)}
-                      title="Orbit active pixels immediately to prevent static diode wear"
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                        isAmoled
-                          ? 'border-zinc-800 bg-zinc-950 text-teal-400 hover:bg-zinc-900'
-                          : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
+                      className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                     >
                       <Move className="w-3.5 h-3.5" />
                       <span>Shift Pixels</span>
                     </button>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Status Banner if present */}
-            {statusBanner && (
-              <div
-                role="status"
-                className={`flex items-center justify-between gap-4 px-4 py-3 rounded-xl border text-xs sm:text-sm ${
-                  isAmoled
-                    ? 'bg-black border-teal-900/70 text-teal-300'
-                    : 'bg-teal-50 dark:bg-teal-950/60 border-teal-200 dark:border-teal-800 text-teal-900 dark:text-teal-200'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Bell className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
-                  <span>{statusBanner}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setStatusBanner(null)}
-                  className="text-xs font-semibold underline shrink-0 cursor-pointer"
-                >
-                  Dismiss
-                </button>
-              </div>
-            )}
-
-            {/* Main Simulator Grid (Pixel-Shifted & On-Pixel Dimmed in AMOLED Mode) */}
-            <div
-              data-testid="amoled-pixel-shift-stage"
-              style={{
-                transform: isAmoled
-                  ? `translate3d(${amoledState.offsetX}px, ${amoledState.offsetY}px, 0)`
-                  : 'translate3d(0px, 0px, 0)',
-                opacity: isAmoled ? amoledState.activeLuminanceOpacity : 1,
-                transition:
-                  'transform 800ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease',
-              }}
-              className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch"
-            >
-            {/* Left 7 Cols: Primary Countdown Clock & Controls */}
-            <div
-              className={`lg:col-span-7 border rounded-2xl p-6 sm:p-8 flex flex-col justify-between space-y-6 transition-colors ${
-                isAmoled
-                  ? 'bg-black border-zinc-900'
-                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-              }`}
-            >
-              {/* Top Meta Row */}
-              <div
-                className={`flex flex-wrap items-center justify-between gap-2 border-b pb-4 ${
-                  isAmoled
-                    ? 'border-zinc-900'
-                    : 'border-slate-200 dark:border-slate-800'
-                }`}
-              >
-                <div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    <span>{examPlan.examTitle}</span>
-                    <span aria-hidden="true"> · </span>
-                    <span>{examPlan.profile.name}</span>
-                    <span aria-hidden="true"> · </span>
-                    <span>
-                      {settings.keepScreenAwake
-                        ? wakeLockActive
-                          ? 'Screen Wake Lock Active'
-                          : 'Keep Screen Awake Enabled'
-                        : 'Standard Screen Timeout'}
-                    </span>
-                  </div>
-                  <h2
-                    className={`mt-1 text-xl sm:text-2xl font-bold ${
-                      isAmoled
-                        ? 'text-zinc-100'
-                        : 'text-slate-900 dark:text-slate-100'
-                    }`}
-                  >
-                    {phase === 'tutorial'
-                      ? `Orientation Tutorial (${examPlan.tutorialMinutes}m)`
-                      : phase === 'break'
-                      ? `Scheduled Break Pool (Before Block ${currentBlockIndex + 2})`
-                      : `Block ${currentBlockIndex + 1} of ${examPlan.numBlocks} (${activeBlock.questionCount} Questions)`}
-                  </h2>
-                </div>
-
-                <div className="text-right font-mono tabular-nums">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 block">
-                    Available Break Pool
-                  </span>
-                  <span className="text-lg font-bold text-teal-600 dark:text-teal-400">
-                    {formatSecondsToClock(breakPoolSeconds)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Center Circular Progress & Tabular Countdown */}
-              <div className="flex flex-col items-center justify-center py-2">
-                <div className="relative w-64 h-64 flex items-center justify-center">
-                  <svg className="w-full h-full -rotate-90" viewBox="0 0 240 240">
-                    <circle
-                      cx="120"
-                      cy="120"
-                      r={circleRadius}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={isAmoled ? '4' : '10'}
-                      className={
-                        isAmoled
-                          ? 'text-zinc-900'
-                          : 'text-slate-100 dark:text-slate-800'
-                      }
-                    />
-                    <circle
-                      cx="120"
-                      cy="120"
-                      r={circleRadius}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={isAmoled ? '5' : '10'}
-                      strokeLinecap="round"
-                      strokeDasharray={circleCircumference}
-                      strokeDashoffset={strokeDashoffset}
-                      className={
-                        phase === 'break'
-                          ? 'text-amber-500 transition-all duration-300'
-                          : phaseRemainingSeconds < 300
-                          ? 'text-rose-600 transition-all duration-300'
-                          : 'text-teal-500 dark:text-teal-400 transition-all duration-300'
-                      }
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
-                      {phase === 'tutorial'
-                        ? 'Tutorial Remaining'
-                        : phase === 'break'
-                        ? 'Break Remaining'
-                        : 'Block Time Left'}
-                    </span>
-                    <div
-                      data-testid="active-timer-clock"
-                      className={`mt-1 text-5xl font-bold font-mono tracking-tight tabular-nums ${
-                        isAmoled
-                          ? 'text-teal-400 font-light'
-                          : 'text-slate-900 dark:text-slate-100'
-                      }`}
-                    >
-                      {formatSecondsToClock(currentClockSec)}
-                    </div>
-                    <span className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-                      {isPaused
-                        ? 'Timer Paused'
-                        : isAmoled
-                        ? `AMOLED Burn-In Safe · ${amoledState.onPixelBrightnessRatio}% Lum`
-                        : 'Counting Down Live'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Controls Bar */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsPaused((p) => !p)}
-                  className="py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  {isPaused ? <Play className="w-3.5 h-3.5 shrink-0" /> : <Pause className="w-3.5 h-3.5 shrink-0" />}
-                  <span>{isPaused ? 'Resume Timer' : 'Pause Timer'}</span>
-                </button>
-
-                {phase === 'tutorial' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBreakPoolSeconds((b) => b + phaseRemainingSeconds);
-                      setPhase('block');
-                      setCurrentBlockIndex(0);
-                      setPhaseRemainingSeconds(examPlan.blocks[0].durationSeconds);
-                      setStatusBanner(
-                        `Tutorial ended early. +${formatSecondsToClock(
-                          phaseRemainingSeconds
-                        )} added to break bank.`
-                      );
-                    }}
-                    className="py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    <SkipForward className="w-3.5 h-3.5 shrink-0" />
-                    <span>Start Block 1</span>
-                  </button>
-                )}
-
-                {phase === 'block' && (
-                  <button
-                    type="button"
-                    onClick={() => triggerBlockCompletion(phaseRemainingSeconds)}
-                    className="py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                    <span>Complete Block Early</span>
-                  </button>
-                )}
-
-                {phase === 'break' && (
-                  <button
-                    type="button"
-                    onClick={resumeBlockFromBreak}
-                    className="py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    <Play className="w-3.5 h-3.5 shrink-0" />
-                    <span>Start Next Block</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (phase === 'break') {
-                      setBreakPoolSeconds((s) => Math.max(3, s - 300));
-                    } else {
-                      setPhaseRemainingSeconds(3);
-                    }
-                  }}
-                  title="Jump to final 3 seconds to test end-of-block bell and prompt"
-                  className="py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  <FastForward className="w-3.5 h-3.5 shrink-0" />
-                  <span>Jump to Final 3s</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    playNotificationBell(settings.notificationTone, settings.notificationVolume);
-                    setPhase('percentile_entry');
-                  }}
-                  aria-label="Finish Exam & Log Score"
-                  className="py-2.5 px-3 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  <Flag className="w-3.5 h-3.5 shrink-0" />
-                  <span>Finish & Log Score</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Right 5 Cols: Live Question Pacing & Block Timeline */}
-            <div
-              className={`lg:col-span-5 border rounded-2xl p-6 sm:p-8 flex flex-col justify-between space-y-6 transition-colors ${
-                isAmoled
-                  ? 'bg-black border-zinc-900'
-                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-              }`}
-            >
-              {/* Question Pacing Assistant */}
-              <div className="space-y-4">
+                {/* Modal Footer Actions */}
                 <div
-                  className={`border-b pb-3 flex items-center justify-between gap-3 ${
-                    isAmoled
-                      ? 'border-zinc-900'
+                  className={`pt-3 border-t flex items-center justify-between gap-3 ${
+                    isPitchBlackCanvas
+                      ? 'border-zinc-800'
                       : 'border-slate-200 dark:border-slate-800'
                   }`}
                 >
-                  <div>
-                    <h3
-                      className={`text-base font-bold ${
-                        isAmoled
-                          ? 'text-zinc-100'
-                          : 'text-slate-900 dark:text-slate-100'
-                      }`}
-                    >
-                      Intuitive Question Pacing Tracker
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Target cadence: {examPlan.secondsPerQuestion}s per question
-                    </p>
-                  </div>
-                  <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-300 tabular-nums whitespace-nowrap shrink-0">
-                    Q {currentQuestionInBlock} / {activeBlock.questionCount}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTimerSettingsModalOpen(false);
+                      setPhase('setup');
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reconfigure Exam
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsTimerSettingsModalOpen(false)}
+                    className={`px-5 py-2 rounded-xl text-xs font-bold cursor-pointer ${
+                      isAmoledBwTheme
+                        ? 'bg-white text-black hover:bg-zinc-200'
+                        : 'bg-teal-600 hover:bg-teal-700 text-white'
+                    }`}
+                  >
+                    Done
+                  </button>
                 </div>
-
-                <div
-                  className={`p-4 rounded-xl border space-y-3 ${
-                    isAmoled
-                      ? 'bg-black border-zinc-900'
-                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Current Question</span>
-                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                      <button
-                        type="button"
-                        aria-label="Previous question"
-                        onClick={() => setCurrentQuestionInBlock((q) => Math.max(1, q - 1))}
-                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="w-10 text-center font-mono font-bold text-base tabular-nums">
-                        {currentQuestionInBlock}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label="Next question"
-                        onClick={() =>
-                          setCurrentQuestionInBlock((q) =>
-                            Math.min(activeBlock.questionCount, q + 1)
-                          )
-                        }
-                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCurrentQuestionInBlock((q) =>
-                            Math.min(activeBlock.questionCount, q + 5)
-                          )
-                        }
-                        className="px-2.5 py-1 rounded-lg bg-slate-200/70 dark:bg-slate-800 text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        +5 Qs
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200/70 dark:border-slate-800 text-xs">
-                    <div>
-                      <span className="text-slate-500 dark:text-slate-400 block">
-                        Time Per Remaining Q
-                      </span>
-                      <span className="font-mono font-bold text-sm text-slate-900 dark:text-slate-100 tabular-nums">
-                        {pacing.secondsRemainingPerQuestion}s / question
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 dark:text-slate-400 block">Pacing Status</span>
-                      <span
-                        className={`font-semibold ${
-                          pacing.status === 'behind'
-                            ? 'text-amber-600 dark:text-amber-400'
-                            : 'text-teal-700 dark:text-teal-400'
-                        }`}
-                      >
-                        {pacing.message}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Multi-Block Progress Grid */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">
-                    Exam Block Sequence ({examPlan.numBlocks} Blocks)
-                  </span>
-                  <span className="font-mono text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap shrink-0">
-                    {blocksCompletedCount} of {examPlan.numBlocks} completed
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 max-h-44 overflow-y-auto pr-1">
-                  {examPlan.blocks.map((blk, idx) => {
-                    const isCompleted = idx < currentBlockIndex || (idx === currentBlockIndex && phase === 'decision_prompt');
-                    const isCurrent = idx === currentBlockIndex && phase === 'block';
-                    return (
-                      <div
-                        key={blk.blockNumber}
-                        className={`p-2 rounded-lg border text-center font-mono text-xs tabular-nums ${
-                          isCurrent
-                            ? 'border-teal-600 bg-teal-50 dark:border-teal-400 dark:bg-teal-950/50 text-teal-900 dark:text-teal-200 font-bold'
-                            : isCompleted
-                            ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400'
-                            : 'border-slate-200/70 dark:border-slate-800/70 text-slate-400 dark:text-slate-500'
-                        }`}
-                      >
-                        <div>B{blk.blockNumber}</div>
-                        <div className="text-[10px]">{blk.durationMinutes}m</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Reset to Setup */}
-              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-                  Auto-continued blocks: {autoContinuedCount}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPhase('setup')}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Reconfigure Exam
-                </button>
               </div>
             </div>
-          </div>
+          )}
 
           {/* 60-SECOND POST-BLOCK BREAK OR CONTINUE PROMPT MODAL */}
           {phase === 'decision_prompt' && (
@@ -1530,7 +1641,6 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
               </div>
             </div>
           )}
-          </div>
         </div>
       )}
 

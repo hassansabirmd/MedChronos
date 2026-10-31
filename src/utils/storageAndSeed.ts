@@ -29,8 +29,11 @@ export interface StudyScheduleItem {
   enabled: boolean;
 }
 
+export type TimerScreenTheme = 'default' | 'amoled_bw';
+
 export interface AppSettings {
   darkMode: boolean;
+  timerScreenTheme: TimerScreenTheme;
   notificationTone: NotificationTone;
   notificationVolume: number; // 0 - 100
   vibrateDuringBreak: boolean;
@@ -50,6 +53,7 @@ const STORAGE_KEYS = {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   darkMode: false,
+  timerScreenTheme: 'default',
   notificationTone: 'clinical_bell',
   notificationVolume: 85,
   vibrateDuringBreak: true,

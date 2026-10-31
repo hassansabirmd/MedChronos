@@ -131,6 +131,89 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
             </button>
           </div>
 
+          {/* 1b. Timer Screen Theme Selector (Default vs AMOLED Black & White) */}
+          <div className="space-y-3 py-3 border-t border-slate-200/70 dark:border-slate-800">
+            <div>
+              <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Timer Screen Theme
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Choose the visual theme applied when the full-screen exam simulation timer is running.
+              </p>
+            </div>
+            <div
+              role="radiogroup"
+              aria-label="Timer Screen Theme"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            >
+              <button
+                type="button"
+                data-testid="theme-option-default"
+                aria-pressed={(settings.timerScreenTheme ?? 'default') === 'default'}
+                onClick={() =>
+                  onUpdateSettings({
+                    ...settings,
+                    timerScreenTheme: 'default',
+                  })
+                }
+                className={`p-3.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                  (settings.timerScreenTheme ?? 'default') === 'default'
+                    ? 'border-teal-600 bg-teal-50/70 dark:border-teal-400 dark:bg-teal-950/40'
+                    : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    Default Theme
+                  </span>
+                  <span className="w-4 h-4 rounded-full bg-teal-600 border border-slate-300 dark:border-slate-600 shrink-0" />
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  Clinical Teal & Slate palette with adaptive light/dark contrast.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                data-testid="theme-option-amoled-bw"
+                aria-pressed={settings.timerScreenTheme === 'amoled_bw'}
+                onClick={() =>
+                  onUpdateSettings({
+                    ...settings,
+                    timerScreenTheme: 'amoled_bw',
+                  })
+                }
+                className={`p-3.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                  settings.timerScreenTheme === 'amoled_bw'
+                    ? 'border-slate-900 bg-black hover:bg-zinc-950 text-white dark:border-white dark:bg-black'
+                    : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={`text-xs font-bold ${
+                      settings.timerScreenTheme === 'amoled_bw'
+                        ? 'text-white'
+                        : 'text-slate-900 dark:text-slate-100'
+                    }`}
+                  >
+                    AMOLED Black & White
+                  </span>
+                  <span className="w-4 h-4 rounded-full bg-black border-2 border-white shrink-0 shadow-xs" />
+                </div>
+                <p
+                  className={`mt-1 text-[11px] ${
+                    settings.timerScreenTheme === 'amoled_bw'
+                      ? 'text-zinc-300'
+                      : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  Pure #000000 black background with high-contrast monochrome white digits.
+                </p>
+              </button>
+            </div>
+          </div>
+
           {/* 2. Do Not Turn Off Screen During Timer (Wake Lock) */}
           <div className="flex items-center justify-between gap-4 py-2 border-t border-slate-200/70 dark:border-slate-800">
             <div className="flex items-start gap-3">
