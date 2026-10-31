@@ -14,6 +14,10 @@ import {
   Flag,
   RotateCcw,
   Sliders,
+  Moon,
+  Sun,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import {
   EXAM_PROFILES,
@@ -39,6 +43,8 @@ import {
 
 interface ExamSetupAndTimerViewProps {
   settings: AppSettings;
+  onUpdateSettings?: (next: AppSettings) => void;
+  onSessionLockChange?: (locked: boolean) => void;
   onSaveSessionToHistory: (entry: ExamHistoryEntry) => void;
   onNavigateToHistory: () => void;
   initialPreset?: {
@@ -59,6 +65,8 @@ type SessionPhase =
 
 export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   settings,
+  onUpdateSettings,
+  onSessionLockChange,
   onSaveSessionToHistory,
   onNavigateToHistory,
   initialPreset,
@@ -112,6 +120,35 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   const [autoContinuedCount, setAutoContinuedCount] = useState<number>(0);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [wakeLockActive, setWakeLockActive] = useState<boolean>(false);
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState<boolean>(false);
+
+  // Sync lock state to parent App so navigation tabs are hidden whenever timer is active
+  useEffect(() => {
+    if (onSessionLockChange) {
+      onSessionLockChange(phase !== 'setup');
+    }
+    if (phase === 'setup' && typeof document !== 'undefined' && document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  }, [phase, onSessionLockChange]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleFsChange = () => {
+      setIsBrowserFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
+  const toggleBrowserFullscreen = () => {
+    if (typeof document === 'undefined') return;
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  };
 
   // Post-exam percentile form state
   const [percentileInput, setPercentileInput] = useState<string>('82');
@@ -162,6 +199,10 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
     setAutoContinuedCount(0);
     setIsPaused(false);
     setStatusBanner(null);
+
+    if (typeof document !== 'undefined' && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
 
     if (!skipTutorial && examPlan.tutorialMinutes > 0) {
       setPhase('tutorial');
@@ -719,31 +760,88 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
         </div>
       )}
 
-      {/* ACTIVE EXAM TIMER VIEW (Tutorial, Block, Break, or Decision Prompt) */}
+      {/* ACTIVE EXAM TIMER VIEW (Full-Screen Locked Exam Mode — No Tab Switching Allowed) */}
       {(phase === 'tutorial' || phase === 'block' || phase === 'break' || phase === 'decision_prompt') && (
-        <div className="space-y-6">
-          {/* Status Banner if present */}
-          {statusBanner && (
-            <div
-              role="status"
-              className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-xs sm:text-sm text-teal-900 dark:text-teal-200"
-            >
-              <div className="flex items-center gap-2.5">
-                <Bell className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
-                <span>{statusBanner}</span>
-              </div>
+        <div
+          data-testid="fullscreen-exam-timer"
+          className="min-h-screen w-full flex flex-col bg-slate-50 dark:bg-slate-950"
+        >
+          {/* Dedicated Full-Screen Exam Mode Header Bar (No Tab Navigation) */}
+          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                MedChronos
+              </span>
+              <span className="text-slate-300 dark:text-slate-700" aria-hidden="true">
+                ·
+              </span>
+              <span className="text-xs font-medium text-teal-700 dark:text-teal-400 truncate">
+                Full-Screen Exam Lock Active — Navigation Disabled During Session
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {onUpdateSettings && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateSettings({ ...settings, darkMode: !settings.darkMode })
+                  }
+                  aria-label="Toggle Dark Mode"
+                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  {settings.darkMode ? (
+                    <Sun className="w-4 h-4 text-amber-400" />
+                  ) : (
+                    <Moon className="w-4 h-4" />
+                  )}
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => setStatusBanner(null)}
-                className="text-xs font-semibold underline shrink-0 cursor-pointer"
+                onClick={toggleBrowserFullscreen}
+                aria-label={isBrowserFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
               >
-                Dismiss
+                {isBrowserFullscreen ? (
+                  <>
+                    <Minimize2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Exit Fullscreen</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Fullscreen</span>
+                  </>
+                )}
               </button>
             </div>
-          )}
+          </div>
 
-          {/* Main Simulator Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+          <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 flex flex-col lg:justify-center">
+            {/* Status Banner if present */}
+            {statusBanner && (
+              <div
+                role="status"
+                className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-xs sm:text-sm text-teal-900 dark:text-teal-200"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Bell className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                  <span>{statusBanner}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStatusBanner(null)}
+                  className="text-xs font-semibold underline shrink-0 cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {/* Main Simulator Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
             {/* Left 7 Cols: Primary Countdown Clock & Controls */}
             <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 flex flex-col justify-between space-y-6">
               {/* Top Meta Row */}
@@ -923,7 +1021,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
             <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 flex flex-col justify-between space-y-6">
               {/* Question Pacing Assistant */}
               <div className="space-y-4">
-                <div className="border-b border-slate-200 dark:border-slate-800 pb-3 flex items-center justify-between">
+                <div className="border-b border-slate-200 dark:border-slate-800 pb-3 flex items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                       Intuitive Question Pacing Tracker
@@ -932,24 +1030,24 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       Target cadence: {examPlan.secondsPerQuestion}s per question
                     </p>
                   </div>
-                  <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
+                  <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 tabular-nums whitespace-nowrap shrink-0">
                     Q {currentQuestionInBlock} / {activeBlock.questionCount}
                   </span>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Current Question</span>
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Current Question</span>
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                       <button
                         type="button"
                         aria-label="Previous question"
                         onClick={() => setCurrentQuestionInBlock((q) => Math.max(1, q - 1))}
-                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
                       >
                         <Minus className="w-3.5 h-3.5" />
                       </button>
-                      <span className="w-12 text-center font-mono font-bold text-base tabular-nums">
+                      <span className="w-10 text-center font-mono font-bold text-base tabular-nums">
                         {currentQuestionInBlock}
                       </span>
                       <button
@@ -960,7 +1058,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                             Math.min(activeBlock.questionCount, q + 1)
                           )
                         }
-                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
@@ -971,7 +1069,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                             Math.min(activeBlock.questionCount, q + 5)
                           )
                         }
-                        className="px-2.5 py-1 rounded-lg bg-slate-200/70 dark:bg-slate-800 text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-slate-200/70 dark:bg-slate-800 text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer whitespace-nowrap shrink-0"
                       >
                         +5 Qs
                       </button>
@@ -1005,11 +1103,11 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
 
               {/* Multi-Block Progress Grid */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between gap-2 text-xs">
                   <span className="font-semibold text-slate-900 dark:text-slate-100">
                     Exam Block Sequence ({examPlan.numBlocks} Blocks)
                   </span>
-                  <span className="font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                  <span className="font-mono text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap shrink-0">
                     {blocksCompletedCount} of {examPlan.numBlocks} completed
                   </span>
                 </div>
@@ -1139,12 +1237,14 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
               </div>
             </div>
           )}
+          </div>
         </div>
       )}
 
       {/* POST-SESSION PERCENTILE SCORE ENTRY VIEW */}
       {phase === 'percentile_entry' && (
-        <div className="max-w-2xl mx-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
+        <div className="min-h-screen w-full flex items-center justify-center p-4 sm:p-8 bg-slate-50 dark:bg-slate-950">
+          <div className="max-w-2xl w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
           <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
             <span className="text-xs font-semibold text-teal-700 dark:text-teal-400">
               Session Completed · Record Outcome
@@ -1239,6 +1339,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
               </button>
             </div>
           </form>
+          </div>
         </div>
       )}
     </div>
