@@ -154,10 +154,17 @@ export const OfflineIndicator: React.FC = () => {
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const handleOnline = () => {
+      setIsOnline(true);
+      setDismissed(false);
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setDismissed(false);
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -168,11 +175,31 @@ export const OfflineIndicator: React.FC = () => {
     };
   }, []);
 
-  if (isOnline) return null;
+  useEffect(() => {
+    if (isOnline || dismissed) return;
+    const timer = window.setTimeout(() => {
+      setDismissed(true);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [isOnline, dismissed]);
+
+  if (isOnline || dismissed) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 z-50 flex items-center gap-2 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-semibold text-white shadow-lg">
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-18 md:bottom-6 left-4 right-4 md:left-auto md:right-6 z-50 flex items-center justify-between gap-3 rounded-xl bg-slate-900/95 dark:bg-slate-800/95 border border-slate-700 px-4 py-2.5 text-xs font-medium text-white shadow-lg backdrop-blur-xs"
+    >
       <span>Offline Mode — Exam Timer & Local Storage Active</span>
+      <button
+        type="button"
+        onClick={() => setDismissed(true)}
+        aria-label="Dismiss offline notice"
+        className="p-1 rounded-md text-slate-300 hover:text-white hover:bg-slate-700/60 transition-colors cursor-pointer shrink-0"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 };
