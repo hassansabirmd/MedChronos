@@ -34,6 +34,8 @@ export type TimerScreenTheme = 'default' | 'amoled_bw';
 export interface AppSettings {
   darkMode: boolean;
   timerScreenTheme: TimerScreenTheme;
+  enablePauseTimerButton: boolean;
+  enableJumpToFinal3sButton: boolean;
   notificationTone: NotificationTone;
   notificationVolume: number; // 0 - 100
   vibrateDuringBreak: boolean;
@@ -54,6 +56,8 @@ const STORAGE_KEYS = {
 export const DEFAULT_SETTINGS: AppSettings = {
   darkMode: false,
   timerScreenTheme: 'default',
+  enablePauseTimerButton: false,
+  enableJumpToFinal3sButton: false,
   notificationTone: 'clinical_bell',
   notificationVolume: 85,
   vibrateDuringBreak: true,

@@ -494,42 +494,33 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
               </p>
             </div>
 
-            {/* 1. Exam Profile Selection */}
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {/* 1. Exam Profile Selection (Dropdown List) */}
+            <div className="space-y-2.5">
+              <label
+                htmlFor="exam-profile-select"
+                className="block text-sm font-semibold text-slate-900 dark:text-slate-100"
+              >
                 Select Exam Regulation Profile
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label="Exam Profile">
+              <select
+                id="exam-profile-select"
+                data-testid="exam-profile-select"
+                value={selectedProfileId}
+                onChange={(e) => handleProfileChange(e.target.value as ExamProfileId)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
+              >
                 {(Object.keys(EXAM_PROFILES) as ExamProfileId[]).map((pid) => {
                   const prof = EXAM_PROFILES[pid];
-                  const isSelected = selectedProfileId === pid;
                   return (
-                    <button
-                      key={pid}
-                      type="button"
-                      onClick={() => handleProfileChange(pid)}
-                      aria-pressed={isSelected}
-                      className={`text-left p-4 rounded-xl border transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'border-teal-600 bg-teal-50/60 dark:border-teal-400 dark:bg-teal-950/40'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/40 dark:bg-slate-900'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
-                          {prof.name}
-                        </span>
-                        <span className="text-xs font-mono text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap shrink-0">
-                          {prof.standardBlocks} blk · {prof.blockDurationMinutes}m
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
-                        {prof.regulationSummary}
-                      </p>
-                    </button>
+                    <option key={pid} value={pid}>
+                      {prof.name} — {prof.standardBlocks} blocks × {prof.blockDurationMinutes}m ({prof.standardTotalQuestions} Qs)
+                    </option>
                   );
                 })}
-              </div>
+              </select>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                {examPlan.profile.regulationSummary}
+              </p>
             </div>
 
             {/* 2. Custom Exam Name Input */}
@@ -877,38 +868,6 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
           </div>
 
           <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-12 space-y-5 flex flex-col justify-center">
-            {/* Status Banner if present */}
-            {statusBanner && (
-              <div
-                role="status"
-                className={`flex items-center justify-between gap-4 px-4 py-3 rounded-xl border text-xs sm:text-sm ${
-                  isAmoledBwTheme
-                    ? 'bg-black border-white/50 text-white'
-                    : isAmoled
-                    ? 'bg-black border-teal-900/70 text-teal-300'
-                    : 'bg-teal-50 dark:bg-teal-950/60 border-teal-200 dark:border-teal-800 text-teal-900 dark:text-teal-200'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Bell
-                    className={`w-4 h-4 shrink-0 ${
-                      isAmoledBwTheme
-                        ? 'text-white'
-                        : 'text-teal-600 dark:text-teal-400'
-                    }`}
-                  />
-                  <span>{statusBanner}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setStatusBanner(null)}
-                  className="text-xs font-semibold underline shrink-0 cursor-pointer"
-                >
-                  Dismiss
-                </button>
-              </div>
-            )}
-
             {/* Primary Countdown Clock & Controls Card (Pixel-Shifted & Dimmed in AMOLED Mode) */}
             <div
               data-testid="amoled-pixel-shift-stage"
@@ -1002,7 +961,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
 
                 {/* Center Circular Progress & Tabular Countdown */}
                 <div className="flex flex-col items-center justify-center py-2">
-                  <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center">
+                  <div className="relative w-72 h-72 sm:w-88 sm:h-88 flex items-center justify-center">
                     <svg className="w-full h-full -rotate-90" viewBox="0 0 240 240">
                       <circle
                         cx="120"
@@ -1010,7 +969,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                         r={circleRadius}
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth={isPitchBlackCanvas ? '4' : '10'}
+                        strokeWidth={isPitchBlackCanvas ? '4' : '8'}
                         className={
                           isAmoledBwTheme
                             ? 'text-zinc-800'
@@ -1025,7 +984,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                         r={circleRadius}
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth={isPitchBlackCanvas ? '5' : '10'}
+                        strokeWidth={isPitchBlackCanvas ? '5' : '8'}
                         strokeLinecap="round"
                         strokeDasharray={circleCircumference}
                         strokeDashoffset={strokeDashoffset}
@@ -1040,7 +999,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                         }
                       />
                     </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
                       <span
                         className={`text-xs uppercase tracking-wider font-semibold ${
                           isAmoledBwTheme
@@ -1056,7 +1015,11 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       </span>
                       <div
                         data-testid="active-timer-clock"
-                        className={`mt-1 text-5xl sm:text-6xl font-bold font-mono tracking-tight tabular-nums ${
+                        className={`mt-1.5 ${
+                          currentClockSec >= 3600
+                            ? 'text-5xl sm:text-6xl'
+                            : 'text-6xl sm:text-7xl md:text-8xl'
+                        } leading-none font-bold font-mono tracking-tight tabular-nums ${
                           isAmoledBwTheme
                             ? 'text-white font-light'
                             : isAmoled
@@ -1067,7 +1030,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                         {formatSecondsToClock(currentClockSec)}
                       </div>
                       <span
-                        className={`mt-1.5 text-xs font-mono tabular-nums ${
+                        className={`mt-2 text-xs font-mono tabular-nums ${
                           isAmoledBwTheme
                             ? 'text-zinc-300'
                             : 'text-slate-500 dark:text-slate-400'
@@ -1087,7 +1050,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
 
                 {/* Action Controls Bar */}
                 <div
-                  className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-4 border-t ${
+                  className={`flex flex-wrap items-center justify-center gap-3 pt-4 border-t ${
                     isAmoledBwTheme
                       ? 'border-white/25'
                       : isAmoled
@@ -1095,22 +1058,25 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       : 'border-slate-200 dark:border-slate-800'
                   }`}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setIsPaused((p) => !p)}
-                    className={`py-2.5 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                      isAmoledBwTheme
-                        ? 'bg-white text-black hover:bg-zinc-200'
-                        : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900'
-                    }`}
-                  >
-                    {isPaused ? (
-                      <Play className="w-3.5 h-3.5 shrink-0" />
-                    ) : (
-                      <Pause className="w-3.5 h-3.5 shrink-0" />
-                    )}
-                    <span>{isPaused ? 'Resume Timer' : 'Pause Timer'}</span>
-                  </button>
+                  {settings.enablePauseTimerButton && (
+                    <button
+                      type="button"
+                      data-testid="timer-pause-btn"
+                      onClick={() => setIsPaused((p) => !p)}
+                      className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                        isAmoledBwTheme
+                          ? 'bg-white text-black hover:bg-zinc-200'
+                          : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900'
+                      }`}
+                    >
+                      {isPaused ? (
+                        <Play className="w-3.5 h-3.5 shrink-0" />
+                      ) : (
+                        <Pause className="w-3.5 h-3.5 shrink-0" />
+                      )}
+                      <span>{isPaused ? 'Resume Timer' : 'Pause Timer'}</span>
+                    </button>
+                  )}
 
                   {phase === 'tutorial' && (
                     <button
@@ -1120,13 +1086,8 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                         setPhase('block');
                         setCurrentBlockIndex(0);
                         setPhaseRemainingSeconds(examPlan.blocks[0].durationSeconds);
-                        setStatusBanner(
-                          `Tutorial ended early. +${formatSecondsToClock(
-                            phaseRemainingSeconds
-                          )} added to break bank.`
-                        );
                       }}
-                      className={`py-2.5 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                      className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
                         isAmoledBwTheme
                           ? 'border border-white bg-black text-white hover:bg-zinc-900'
                           : 'bg-teal-600 hover:bg-teal-700 text-white'
@@ -1141,7 +1102,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                     <button
                       type="button"
                       onClick={() => triggerBlockCompletion(phaseRemainingSeconds)}
-                      className={`py-2.5 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                      className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
                         isAmoledBwTheme
                           ? 'border border-white bg-black text-white hover:bg-zinc-900'
                           : 'bg-teal-600 hover:bg-teal-700 text-white'
@@ -1156,7 +1117,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                     <button
                       type="button"
                       onClick={resumeBlockFromBreak}
-                      className={`py-2.5 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                      className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
                         isAmoledBwTheme
                           ? 'border border-white bg-black text-white hover:bg-zinc-900'
                           : 'bg-teal-600 hover:bg-teal-700 text-white'
@@ -1167,25 +1128,28 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                     </button>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (phase === 'break') {
-                        setBreakPoolSeconds((s) => Math.max(3, s - 300));
-                      } else {
-                        setPhaseRemainingSeconds(3);
-                      }
-                    }}
-                    title="Jump to final 3 seconds to test end-of-block bell and prompt"
-                    className={`py-2.5 px-3 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                      isAmoledBwTheme
-                        ? 'border-white/50 text-white hover:bg-zinc-900'
-                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    <FastForward className="w-3.5 h-3.5 shrink-0" />
-                    <span>Jump to Final 3s</span>
-                  </button>
+                  {settings.enableJumpToFinal3sButton && (
+                    <button
+                      type="button"
+                      data-testid="timer-jump-3s-btn"
+                      onClick={() => {
+                        if (phase === 'break') {
+                          setBreakPoolSeconds((s) => Math.max(3, s - 300));
+                        } else {
+                          setPhaseRemainingSeconds(3);
+                        }
+                      }}
+                      title="Jump to final 3 seconds to test end-of-block bell and prompt"
+                      className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                        isAmoledBwTheme
+                          ? 'border-white/50 text-white hover:bg-zinc-900'
+                          : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <FastForward className="w-3.5 h-3.5 shrink-0" />
+                      <span>Jump to Final 3s</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -1197,7 +1161,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       setPhase('percentile_entry');
                     }}
                     aria-label="Finish Exam & Log Score"
-                    className={`py-2.5 px-3 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                    className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
                       isAmoledBwTheme
                         ? 'border-white/50 text-white hover:bg-zinc-900'
                         : 'border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300'
@@ -1621,15 +1585,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                   </button>
                 </div>
 
-                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDecisionChoice('timeout_auto_continue')}
-                    className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 underline cursor-pointer"
-                  >
-                    Simulate 1-Minute Unanswered Timeout
-                  </button>
-
+                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setPhase('percentile_entry')}

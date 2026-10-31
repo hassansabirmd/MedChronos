@@ -288,6 +288,75 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
             </button>
           </div>
 
+          {/* 3a. Optional Timer Screen Action Buttons (Pause Timer & Jump to Final 3s) */}
+          <div className="space-y-3 py-3 border-t border-slate-200/70 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Enable "Pause Timer" Button on Timer Screen
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Hidden by default for strict board exam realism. Enable to allow pausing active blocks.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                data-testid="settings-toggle-pause-btn"
+                aria-checked={Boolean(settings.enablePauseTimerButton)}
+                aria-label="Enable Pause Timer Button on Timer Screen"
+                onClick={() =>
+                  onUpdateSettings({
+                    ...settings,
+                    enablePauseTimerButton: !settings.enablePauseTimerButton,
+                  })
+                }
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                  settings.enablePauseTimerButton ? 'bg-teal-600' : 'bg-slate-300 dark:bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition-transform ${
+                    settings.enablePauseTimerButton ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/60">
+              <div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Enable "Jump to Final 3s" Button on Timer Screen
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Hidden by default. Enable to quickly test end-of-block notification bells and break prompts.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                data-testid="settings-toggle-jump3s-btn"
+                aria-checked={Boolean(settings.enableJumpToFinal3sButton)}
+                aria-label="Enable Jump to Final 3s Button on Timer Screen"
+                onClick={() =>
+                  onUpdateSettings({
+                    ...settings,
+                    enableJumpToFinal3sButton: !settings.enableJumpToFinal3sButton,
+                  })
+                }
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                  settings.enableJumpToFinal3sButton ? 'bg-teal-600' : 'bg-slate-300 dark:bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition-transform ${
+                    settings.enableJumpToFinal3sButton ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
           {/* 3b. Always-On AMOLED Display & Pixel Burn-In Protection */}
           <div className="space-y-3 py-3 border-t border-slate-200/70 dark:border-slate-800">
             <div className="flex items-center justify-between gap-4">
