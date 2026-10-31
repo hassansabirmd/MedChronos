@@ -31,7 +31,11 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: |
+          # Google AI Studio rewrites bun.lock independently of package.json
+          # (often re-adding @google/genai). Follow package.json instead of
+          # failing on a frozen lockfile mismatch.
+          bun install
 
       - name: Build
         run: bun run build
