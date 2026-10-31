@@ -1,0 +1,6 @@
+{
+  "name": "MedChronos — Clinical Board Exam Timer & Pacing Simulator",
+  "description": "Medical board exam timer and pacing simulator for USMLE Step 1, Step 2 CK, ABIM, AMC, MCPS, and NBME self-assessments with automatic block & break calculations, 60-second auto-advance prompts, wake lock, and percentile analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
