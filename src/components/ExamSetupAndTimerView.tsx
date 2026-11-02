@@ -4,19 +4,13 @@ import {
   Pause,
   SkipForward,
   Coffee,
-  Bell,
-  Clock,
   CheckCircle2,
-  AlertTriangle,
   FastForward,
   Flag,
   RotateCcw,
   Sliders,
-  Moon,
-  Sun,
   Maximize2,
   Minimize2,
-  Smartphone,
   Move,
   Settings,
   X,
@@ -907,25 +901,19 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column: Profile & Question Configuration */}
           <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
-            <div className="border-b border-slate-200 dark:border-slate-800 pb-5">
-              <p className="text-xs font-medium text-teal-700 dark:text-teal-400">
-                01. Simulation Configuration
-              </p>
-              <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                Configure Medical Board Exam Timer
+            <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                Exam Timer Setup
               </h1>
-              <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400">
-                Select your licensing exam profile, enter a custom assessment name (e.g., NBME 30), and set the question count to automatically compute blocks, tutorial, and break intervals.
-              </p>
             </div>
 
             {/* 1. Exam Profile Selection (Dropdown List) */}
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               <label
                 htmlFor="exam-profile-select"
                 className="block text-sm font-semibold text-slate-900 dark:text-slate-100"
               >
-                Select Exam Regulation Profile
+                Exam Profile
               </label>
               <select
                 id="exam-profile-select"
@@ -938,14 +926,11 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                   const prof = EXAM_PROFILES[pid];
                   return (
                     <option key={pid} value={pid}>
-                      {prof.name} — {prof.standardBlocks} blocks × {prof.blockDurationMinutes}m ({prof.standardTotalQuestions} Qs)
+                      {prof.name} ({prof.standardBlocks} blocks × {prof.blockDurationMinutes}m · {prof.standardTotalQuestions} Qs)
                     </option>
                   );
                 })}
               </select>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                {examPlan.profile.regulationSummary}
-              </p>
             </div>
 
             {/* 2. Custom Exam Name Input */}
@@ -1119,77 +1104,46 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
             )}
           </div>
 
-          {/* Right Column: Automatic Regulation Breakdown & Start CTA */}
+          {/* Right Column: Session Summary & Start CTA */}
           <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
-            <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
-              <p className="text-xs font-medium text-teal-700 dark:text-teal-400">
-                02. Automatic Regulation Calculation
-              </p>
-              <h2 className="mt-1 text-xl font-bold text-slate-900 dark:text-slate-100">
+            <div className="border-b border-slate-200 dark:border-slate-800 pb-4 flex items-baseline justify-between gap-2">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
                 {examPlan.examTitle}
               </h2>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                {examPlan.profile.name} · {examPlan.profile.organization}
-              </p>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                {examPlan.profile.shortCode}
+              </span>
             </div>
 
             {/* Key Metrics Grid */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3.5">
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/80">
-                <span className="text-xs text-slate-500 dark:text-slate-400">Calculated Blocks</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">Blocks</span>
                 <div className="mt-1 text-2xl font-bold font-mono text-slate-900 dark:text-slate-100 tabular-nums">
-                  {examPlan.numBlocks} {examPlan.numBlocks === 1 ? 'Block' : 'Blocks'}
+                  {examPlan.numBlocks} × {examPlan.blockDurationMinutes}m
                 </div>
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-                  {examPlan.blockDurationMinutes} min / block ({examPlan.questionsPerBlock} Qs)
-                </span>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/80">
-                <span className="text-xs text-slate-500 dark:text-slate-400">Total Exam Duration</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">Total Duration</span>
                 <div className="mt-1 text-2xl font-bold font-mono text-teal-700 dark:text-teal-400 tabular-nums">
                   {examPlan.totalExamHoursFormatted}
                 </div>
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-                  {examPlan.totalExamMinutes} total minutes
-                </span>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/80">
-                <span className="text-xs text-slate-500 dark:text-slate-400">Allocated Break Pool</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">Break Pool</span>
                 <div className="mt-1 text-xl font-bold font-mono text-slate-900 dark:text-slate-100 tabular-nums">
-                  {examPlan.totalBreakMinutes} min
+                  {examPlan.totalBreakMinutes}m
                 </div>
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-                  {examPlan.tutorialMinutes} min tutorial included
-                </span>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/80">
-                <span className="text-xs text-slate-500 dark:text-slate-400">Question Cadence</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">Tutorial</span>
                 <div className="mt-1 text-xl font-bold font-mono text-slate-900 dark:text-slate-100 tabular-nums">
-                  {examPlan.secondsPerQuestion}s / Q
+                  {examPlan.tutorialMinutes}m
                 </div>
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-                  {examPlan.totalBlockMinutes}m active testing
-                </span>
               </div>
-            </div>
-
-            {/* Regulation Breakdown List */}
-            <div className="space-y-2.5 text-xs text-slate-600 dark:text-slate-400 bg-slate-50/80 dark:bg-slate-950/70 p-4 rounded-xl">
-              <div className="font-semibold text-slate-900 dark:text-slate-200">
-                Active Simulation Rules:
-              </div>
-              <p>
-                1. <strong>Block Schedule</strong>: {examPlan.numBlocks} blocks of {examPlan.blockDurationMinutes}m each ({examPlan.totalBlockMinutes}m) + {examPlan.tutorialMinutes}m tutorial + {examPlan.totalBreakMinutes}m break = {examPlan.totalExamHoursFormatted}.
-              </p>
-              <p>
-                2. <strong>Post-Block Bell & 1-Minute Auto-Advance</strong>: After every block, the notification bell rings and prompts whether to take a break or continue. If unanswered within 60 seconds, the next block starts automatically without a break.
-              </p>
-              <p>
-                3. <strong>Hardware Protection</strong>: Screen Wake Lock ({settings.keepScreenAwake ? 'Enabled' : 'Disabled'}) and Break Vibration ({settings.vibrateDuringBreak ? 'Enabled' : 'Disabled'}).
-              </p>
             </div>
 
             {/* Primary CTA Buttons */}
@@ -1335,15 +1289,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                     >
                       <span>{examPlan.examTitle}</span>
                       <span aria-hidden="true"> · </span>
-                      <span>{examPlan.profile.name}</span>
-                      <span aria-hidden="true"> · </span>
-                      <span>
-                        {settings.keepScreenAwake
-                          ? wakeLockActive
-                            ? 'Screen Wake Lock Active'
-                            : 'Keep Screen Awake Enabled'
-                          : 'Standard Screen Timeout'}
-                      </span>
+                      <span>{examPlan.profile.shortCode}</span>
                     </div>
                     <h2
                       className={`mt-1 text-xl sm:text-2xl font-bold ${
@@ -1355,10 +1301,10 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       }`}
                     >
                       {phase === 'tutorial'
-                        ? `Orientation Tutorial (${examPlan.tutorialMinutes}m)`
+                        ? `Tutorial (${examPlan.tutorialMinutes}m)`
                         : phase === 'break'
-                        ? `Scheduled Break Pool (Before Block ${currentBlockIndex + 2})`
-                        : `Block ${currentBlockIndex + 1} of ${examPlan.numBlocks} (${activeBlock.questionCount} Questions)`}
+                        ? `Break (Before Block ${currentBlockIndex + 2})`
+                        : `Block ${currentBlockIndex + 1} of ${examPlan.numBlocks}`}
                     </h2>
                   </div>
 
@@ -1454,21 +1400,17 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       >
                         {formatSecondsToClock(currentClockSec)}
                       </div>
-                      <span
-                        className={`mt-2 text-xs font-mono tabular-nums ${
-                          isAmoledBwTheme
-                            ? 'text-zinc-300'
-                            : 'text-slate-500 dark:text-slate-400'
-                        }`}
-                      >
-                        {isPaused
-                          ? 'Timer Paused'
-                          : isAmoled
-                          ? `AMOLED Burn-In Safe · ${amoledState.onPixelBrightnessRatio}% Lum`
-                          : isAmoledBwTheme
-                          ? 'AMOLED Black & White Theme'
-                          : 'Counting Down Live'}
-                      </span>
+                      {isPaused && (
+                        <span
+                          className={`mt-2 text-xs font-mono tabular-nums ${
+                            isAmoledBwTheme
+                              ? 'text-zinc-300'
+                              : 'text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          Paused
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1617,20 +1559,9 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       : 'border-slate-200 dark:border-slate-800'
                   }`}
                 >
-                  <div>
-                    <span
-                      className={`text-xs font-semibold ${
-                        isAmoledBwTheme
-                          ? 'text-zinc-300'
-                          : 'text-teal-600 dark:text-teal-400'
-                      }`}
-                    >
-                      In-Session Controls & Display Protection
-                    </span>
-                    <h3 id="timer-tools-modal-title" className="text-xl font-bold mt-0.5">
-                      Session Controls & Always-On AMOLED Settings
-                    </h3>
-                  </div>
+                  <h3 id="timer-tools-modal-title" className="text-lg font-bold">
+                    Timer Settings
+                  </h3>
                   <button
                     type="button"
                     data-testid="close-timer-tools-modal-btn"
@@ -1649,7 +1580,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                 {/* Card 0: Undo Last Action Card */}
                 <div
                   data-testid="undo-last-action-card"
-                  className={`rounded-2xl border p-5 space-y-3 ${
+                  className={`rounded-2xl border p-4 ${
                     isPitchBlackCanvas
                       ? 'bg-black border-zinc-800'
                       : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
@@ -1658,7 +1589,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h4 className="text-base font-bold">Undo Last Action</h4>
+                        <h4 className="text-sm font-bold">Undo Last Action</h4>
                         {undoStack.length > 0 && (
                           <span
                             className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
@@ -1667,15 +1598,10 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                                 : 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300'
                             }`}
                           >
-                            {undoStack.length} {undoStack.length === 1 ? 'step' : 'steps'} available
+                            {undoStack[undoStack.length - 1].actionDescription}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        {undoStack.length > 0
-                          ? `Last action: "${undoStack[undoStack.length - 1].actionDescription}". Undoing restores the previous phase (e.g. returning to Break timer) and adjusts elapsed seconds automatically.`
-                          : 'No phase transitions recorded yet in this session. Mistakenly ending a break or block can be reversed here with automatic time adjustment.'}
-                      </p>
                     </div>
                     <button
                       type="button"
@@ -1685,7 +1611,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                         handleUndoLastAction();
                         setIsTimerSettingsModalOpen(false);
                       }}
-                      className={`px-4 py-2.5 rounded-xl font-bold text-xs inline-flex items-center justify-center gap-2 transition-colors shrink-0 ${
+                      className={`px-4 py-2 rounded-xl font-bold text-xs inline-flex items-center justify-center gap-2 transition-colors shrink-0 ${
                         undoStack.length === 0
                           ? 'opacity-40 cursor-not-allowed border border-slate-300 dark:border-slate-700 text-slate-400'
                           : isAmoledBwTheme
@@ -1702,33 +1628,28 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                 {/* Card 2: Always-On AMOLED Display Settings Card */}
                 <div
                   data-testid="amoled-timer-control-bar"
-                  className={`rounded-2xl border p-5 space-y-4 ${
+                  className={`rounded-2xl border p-4 space-y-4 ${
                     isPitchBlackCanvas
                       ? 'bg-black border-zinc-800'
                       : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-base font-bold">
-                          Always-On AMOLED Display
-                        </h4>
-                        <span
-                          className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
-                            isAmoled
-                              ? isAmoledBwTheme
-                                ? 'border-white text-white'
-                                : 'border-teal-800/80 bg-teal-950/50 text-teal-300'
-                              : 'border-slate-200 dark:border-slate-700 text-slate-500'
-                          }`}
-                        >
-                          {isAmoled ? 'Burn-In Guard Active' : 'Off'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        True #000000 pixel-off canvas with 2D orbital pixel shifting and alternating sub-pixel interleaving to prevent OLED burn-in.
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold">
+                        Always-On AMOLED Display
+                      </h4>
+                      <span
+                        className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+                          isAmoled
+                            ? isAmoledBwTheme
+                              ? 'border-white text-white'
+                              : 'border-teal-800/80 bg-teal-950/50 text-teal-300'
+                            : 'border-slate-200 dark:border-slate-700 text-slate-500'
+                        }`}
+                      >
+                        {isAmoled ? 'Active' : 'Off'}
+                      </span>
                     </div>
                     <button
                       type="button"
@@ -1857,13 +1778,13 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1">
                     <span className="text-xs font-semibold text-teal-700 dark:text-teal-400">
-                      Notification Bell Alert · End of Block {currentBlockIndex + 1}
+                      Block {currentBlockIndex + 1} Complete
                     </span>
                     <h3
                       id="block-complete-modal-title"
                       className="text-xl font-bold text-slate-900 dark:text-slate-100"
                     >
-                      Take a Scheduled Break or Continue to Block {currentBlockIndex + 2}?
+                      Take a Break or Continue to Block {currentBlockIndex + 2}?
                     </h3>
                   </div>
                   <div className="text-right font-mono tabular-nums shrink-0">
@@ -1877,16 +1798,6 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       {formatSecondsToClock(decisionRemainingSeconds)}
                     </span>
                   </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
-                  <div className="flex items-center gap-2 font-semibold">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <span>1-Minute Regulation Auto-Advance Rule Active</span>
-                  </div>
-                  <p>
-                    If you do not select an option within 1 minute ({decisionRemainingSeconds}s remaining), the timer will automatically start <strong>Block {currentBlockIndex + 2}</strong> without taking a break.
-                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1928,17 +1839,11 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
       {/* POST-SESSION PERCENTILE SCORE ENTRY VIEW */}
       {phase === 'percentile_entry' && (
         <div className="min-h-screen w-full flex items-center justify-center p-4 sm:p-8 bg-slate-50 dark:bg-slate-950">
-          <div className="max-w-2xl w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
+          <div className="max-w-xl w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
           <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
-            <span className="text-xs font-semibold text-teal-700 dark:text-teal-400">
-              Session Completed · Record Outcome
-            </span>
-            <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-              Enter Your Exam Percentile Score
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+              Log Session Score — {examPlan.examTitle}
             </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              Save your result for <strong>{examPlan.examTitle}</strong> ({examPlan.profile.name}) to track your longitudinal readiness and percentile trajectory.
-            </p>
           </div>
 
           <form onSubmit={handleSaveSessionScore} className="space-y-5">

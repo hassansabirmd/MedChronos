@@ -10,6 +10,9 @@ import {
   Play,
   Trash2,
   Bell,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { EXAM_PROFILES, ExamProfileId } from '../utils/examLogic';
 import { AppSettings, StudyScheduleItem } from '../utils/storageAndSeed';
@@ -18,7 +21,6 @@ import {
   TONE_LABELS,
   playNotificationBell,
   triggerVibration,
-  isWakeLockSupported,
 } from '../utils/soundAndHardware';
 
 interface SettingsAndScheduleViewProps {
@@ -41,6 +43,7 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
   const [newProfileId, setNewProfileId] = useState<ExamProfileId>('USMLE_STEP_1');
   const [newQuestions, setNewQuestions] = useState<string>('80');
   const [newStartTime, setNewStartTime] = useState<string>('08:00');
+  const [isHelpExpanded, setIsHelpExpanded] = useState<boolean>(true);
 
   const handleAddScheduleBlock = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,38 +81,30 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
 
   return (
     <div className="space-y-8">
-      <div className="border-b border-slate-200 dark:border-slate-800 pb-5">
-        <p className="text-xs font-medium text-teal-700 dark:text-teal-400">
-          Preferences, Hardware Controls & Weekly Study Planner
-        </p>
-        <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-          Settings & Study Schedule
+      <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          Settings, Schedule & Help
         </h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left 6 Cols: App Settings (Dark Mode, Sound, Vibration, Screen Wake Lock) */}
-        <div className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-3">
-            Timer Hardware, Display & Audio Settings
+        {/* Left 6 Cols: App Settings (Clean, zero-clutter rows) */}
+        <div className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-5">
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-3">
+            Display, Hardware & Timer Controls
           </h2>
 
           {/* 1. Dark Mode Toggle */}
-          <div className="flex items-center justify-between gap-4 py-2">
-            <div className="flex items-start gap-3">
+          <div className="flex items-center justify-between gap-4 py-1">
+            <div className="flex items-center gap-3">
               {settings.darkMode ? (
-                <Moon className="w-5 h-5 text-teal-500 shrink-0 mt-0.5" />
+                <Moon className="w-4 h-4 text-teal-500 shrink-0" />
               ) : (
-                <Sun className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <Sun className="w-4 h-4 text-amber-500 shrink-0" />
               )}
-              <div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Dark Mode Interface
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Reduce eye strain during 8-hour full-length USMLE and ABIM mock sessions.
-                </p>
-              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Dark Mode
+              </span>
             </div>
             <button
               type="button"
@@ -132,19 +127,14 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
           </div>
 
           {/* 1b. Timer Screen Theme Selector (Default vs AMOLED Black & White) */}
-          <div className="space-y-3 py-3 border-t border-slate-200/70 dark:border-slate-800">
-            <div>
-              <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Timer Screen Theme
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Choose the visual theme applied when the full-screen exam simulation timer is running.
-              </p>
+          <div className="space-y-2.5 pt-3 border-t border-slate-200/70 dark:border-slate-800">
+            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Timer Screen Theme
             </div>
             <div
               role="radiogroup"
               aria-label="Timer Screen Theme"
-              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+              className="grid grid-cols-2 gap-3"
             >
               <button
                 type="button"
@@ -156,21 +146,16 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
                     timerScreenTheme: 'default',
                   })
                 }
-                className={`p-3.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                className={`px-3.5 py-2.5 rounded-xl border text-left transition-colors cursor-pointer flex items-center justify-between gap-2 ${
                   (settings.timerScreenTheme ?? 'default') === 'default'
                     ? 'border-teal-600 bg-teal-50/70 dark:border-teal-400 dark:bg-teal-950/40'
                     : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'
                 }`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                    Default Theme
-                  </span>
-                  <span className="w-4 h-4 rounded-full bg-teal-600 border border-slate-300 dark:border-slate-600 shrink-0" />
-                </div>
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  Clinical Teal & Slate palette with adaptive light/dark contrast.
-                </p>
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                  Default Theme
+                </span>
+                <span className="w-3.5 h-3.5 rounded-full bg-teal-600 border border-slate-300 dark:border-slate-600 shrink-0" />
               </button>
 
               <button
@@ -183,49 +168,33 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
                     timerScreenTheme: 'amoled_bw',
                   })
                 }
-                className={`p-3.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                className={`px-3.5 py-2.5 rounded-xl border text-left transition-colors cursor-pointer flex items-center justify-between gap-2 ${
                   settings.timerScreenTheme === 'amoled_bw'
                     ? 'border-slate-900 bg-black hover:bg-zinc-950 text-white dark:border-white dark:bg-black'
                     : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'
                 }`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span
-                    className={`text-xs font-bold ${
-                      settings.timerScreenTheme === 'amoled_bw'
-                        ? 'text-white'
-                        : 'text-slate-900 dark:text-slate-100'
-                    }`}
-                  >
-                    AMOLED Black & White
-                  </span>
-                  <span className="w-4 h-4 rounded-full bg-black border-2 border-white shrink-0 shadow-xs" />
-                </div>
-                <p
-                  className={`mt-1 text-[11px] ${
+                <span
+                  className={`text-xs font-bold ${
                     settings.timerScreenTheme === 'amoled_bw'
-                      ? 'text-zinc-300'
-                      : 'text-slate-500 dark:text-slate-400'
+                      ? 'text-white'
+                      : 'text-slate-900 dark:text-slate-100'
                   }`}
                 >
-                  Pure #000000 black background with high-contrast monochrome white digits.
-                </p>
+                  AMOLED Black & White
+                </span>
+                <span className="w-3.5 h-3.5 rounded-full bg-black border-2 border-white shrink-0 shadow-xs" />
               </button>
             </div>
           </div>
 
           {/* 2. Do Not Turn Off Screen During Timer (Wake Lock) */}
-          <div className="flex items-center justify-between gap-4 py-2 border-t border-slate-200/70 dark:border-slate-800">
-            <div className="flex items-start gap-3">
-              <Monitor className="w-5 h-5 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
-              <div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Do Not Turn Off Screen During Timer
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Acquires Screen Wake Lock while blocks or breaks are counting down ({isWakeLockSupported() ? 'Supported on this device' : 'Managed via browser power policy'}).
-                </p>
-              </div>
+          <div className="flex items-center justify-between gap-4 pt-3 border-t border-slate-200/70 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <Monitor className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Keep Screen Awake During Timer
+              </span>
             </div>
             <button
               type="button"
@@ -251,17 +220,12 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
           </div>
 
           {/* 3. Vibration Feedback During Break Timer */}
-          <div className="flex items-center justify-between gap-4 py-2 border-t border-slate-200/70 dark:border-slate-800">
-            <div className="flex items-start gap-3">
-              <Smartphone className="w-5 h-5 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
-              <div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Vibration Feedback During Break Timer
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Triggers tactile haptic pulses at block completion, break intervals, and break expiration.
-                </p>
-              </div>
+          <div className="flex items-center justify-between gap-4 pt-3 border-t border-slate-200/70 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <Smartphone className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Vibration Feedback During Breaks
+              </span>
             </div>
             <button
               type="button"
@@ -289,16 +253,11 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
           </div>
 
           {/* 3a. Optional Timer Screen Action Buttons (Pause Timer & Jump to Final 3s) */}
-          <div className="space-y-3 py-3 border-t border-slate-200/70 dark:border-slate-800">
+          <div className="space-y-3 pt-3 border-t border-slate-200/70 dark:border-slate-800">
             <div className="flex items-center justify-between gap-4">
-              <div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Enable "Pause Timer" Button on Timer Screen
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Hidden by default for strict board exam realism. Enable to allow pausing active blocks.
-                </p>
-              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Show "Pause Timer" Button on Timer Screen
+              </span>
               <button
                 type="button"
                 role="switch"
@@ -323,15 +282,10 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
               </button>
             </div>
 
-            <div className="flex items-center justify-between gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/60">
-              <div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Enable "Jump to Final 3s" Button on Timer Screen
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Hidden by default. Enable to quickly test end-of-block notification bells and break prompts.
-                </p>
-              </div>
+            <div className="flex items-center justify-between gap-4 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Show "Jump to Final 3s" Button on Timer Screen
+              </span>
               <button
                 type="button"
                 role="switch"
@@ -358,16 +312,11 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
           </div>
 
           {/* 3b. Always-On AMOLED Display & Pixel Burn-In Protection */}
-          <div className="space-y-3 py-3 border-t border-slate-200/70 dark:border-slate-800">
+          <div className="space-y-3 pt-3 border-t border-slate-200/70 dark:border-slate-800">
             <div className="flex items-center justify-between gap-4">
-              <div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Always-On AMOLED Display (Running Timer)
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Uses a true #000000 black pixel-off canvas, 2D orbital pixel shifting, and sub-pixel checkerboard interleaving to prevent OLED burn-in.
-                </p>
-              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Always-On AMOLED Display
+              </span>
               <button
                 type="button"
                 role="switch"
@@ -394,7 +343,7 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
             <div>
               <div className="flex items-center justify-between text-xs font-medium text-slate-600 dark:text-slate-400">
                 <label htmlFor="settings-amoled-dimming-range">
-                  On-Pixels Dimming Ratio ({settings.amoledDimmingRatio ?? 45}% dimmed · {100 - (settings.amoledDimmingRatio ?? 45)}% active luminance)
+                  On-Pixels Dimming Ratio ({settings.amoledDimmingRatio ?? 45}% dimmed)
                 </label>
               </div>
               <input
@@ -410,18 +359,18 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
                     amoledDimmingRatio: Number(e.target.value),
                   })
                 }
-                className="mt-2 w-full accent-teal-600 cursor-pointer"
+                className="mt-1.5 w-full accent-teal-600 cursor-pointer"
               />
             </div>
           </div>
 
           {/* 4. Notification Sound Settings */}
-          <div className="space-y-4 pt-3 border-t border-slate-200/70 dark:border-slate-800">
+          <div className="space-y-3 pt-3 border-t border-slate-200/70 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Volume2 className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                 <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Block Notification Bell Sound
+                  Notification Bell
                 </span>
               </div>
               <button
@@ -435,7 +384,7 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
                 className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <Bell className="w-3.5 h-3.5" />
-                Test Bell Sound
+                Test Bell
               </button>
             </div>
 
@@ -445,7 +394,7 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
                   htmlFor="notification-tone-select"
                   className="block text-xs font-medium text-slate-600 dark:text-slate-400"
                 >
-                  Bell Tone Profile
+                  Bell Tone
                 </label>
                 <select
                   id="notification-tone-select"
@@ -470,7 +419,7 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
                   htmlFor="notification-volume-range"
                   className="block text-xs font-medium text-slate-600 dark:text-slate-400"
                 >
-                  Bell Volume ({settings.notificationVolume}%)
+                  Volume ({settings.notificationVolume}%)
                 </label>
                 <input
                   id="notification-volume-range"
@@ -498,7 +447,7 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
                 htmlFor="target-exam-date"
                 className="block text-xs font-medium text-slate-600 dark:text-slate-400"
               >
-                Target Board Exam Date
+                Target Exam Date
               </label>
               <input
                 id="target-exam-date"
@@ -537,12 +486,12 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
         </div>
 
         {/* Right 6 Cols: Customizable Study Schedule Planner */}
-        <div className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
+        <div className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-5">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
             <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                Custom Weekly Study Schedule
+              <Calendar className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                Weekly Study Schedule
               </h2>
             </div>
             <span className="text-xs font-mono text-slate-500 dark:text-slate-400 tabular-nums">
@@ -555,9 +504,6 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
             onSubmit={handleAddScheduleBlock}
             className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3"
           >
-            <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Add Scheduled Exam Block Session
-            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <select
                 aria-label="Day of week"
@@ -680,6 +626,103 @@ export const SettingsAndScheduleView: React.FC<SettingsAndScheduleViewProps> = (
           </div>
         </div>
       </div>
+
+      {/* Help & Documentation Section (Houses all detailed option and regulation descriptions) */}
+      <section
+        data-testid="settings-help-section"
+        aria-labelledby="settings-help-heading"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden"
+      >
+        <button
+          type="button"
+          onClick={() => setIsHelpExpanded((prev) => !prev)}
+          aria-expanded={isHelpExpanded}
+          className="w-full px-6 py-4 flex items-center justify-between gap-4 text-left hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5">
+            <HelpCircle className="w-5 h-5 text-teal-600 dark:text-teal-400 shrink-0" />
+            <h2
+              id="settings-help-heading"
+              className="text-base font-bold text-slate-900 dark:text-slate-100"
+            >
+              Help & Feature Reference
+            </h2>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+            <span>{isHelpExpanded ? 'Hide Details' : 'Show Details'}</span>
+            {isHelpExpanded ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </div>
+        </button>
+
+        {isHelpExpanded && (
+          <div className="px-6 pb-6 pt-2 border-t border-slate-200 dark:border-slate-800 space-y-6 text-xs text-slate-600 dark:text-slate-400">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  1. Exam Regulation Profiles & Block Calculation
+                </h3>
+                <p>
+                  Selecting an exam profile and total question count automatically calculates the number of blocks, tutorial duration, and total break pool based on official board rules:
+                </p>
+                <ul className="space-y-1 list-disc list-inside">
+                  {(Object.keys(EXAM_PROFILES) as ExamProfileId[]).map((pid) => {
+                    const prof = EXAM_PROFILES[pid];
+                    return (
+                      <li key={pid}>
+                        <strong className="text-slate-800 dark:text-slate-200">{prof.shortCode}</strong>:{' '}
+                        {prof.regulationSummary}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  2. Post-Block Bell & 1-Minute Auto-Advance
+                </h3>
+                <p>
+                  At the end of every block, the notification bell rings and prompts you to either take a break from your remaining break pool or continue immediately to the next block.
+                </p>
+                <p>
+                  If no selection is made within <strong>60 seconds</strong>, the simulator automatically starts the next block without deducting break time.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  3. Background Timer Continuity & Undo Last Action
+                </h3>
+                <p>
+                  <strong>Background / Closed-App Persistence</strong>: Active sessions use wall-clock timestamps saved to local storage so the countdown continues accurately even if the app is backgrounded or closed and reopened.
+                </p>
+                <p>
+                  <strong>Undo Last Action</strong>: Accessible via the top-right gear icon on the timer screen. If you mistakenly end a break or complete a block early, Undo restores the previous phase and adjusts elapsed seconds automatically.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  4. Display Themes, AMOLED Protection & Hardware Controls
+                </h3>
+                <p>
+                  <strong>Timer Screen Themes</strong>: Choose between the Default clinical palette or the high-contrast AMOLED Black & White theme (#000000 background with pure white digits).
+                </p>
+                <p>
+                  <strong>Always-On AMOLED Display</strong>: Prevents OLED pixel burn-in during multi-hour exams using 2D orbital pixel shifting, alternating sub-pixel checkerboard masking, and a customizable On-Pixels Dimming Ratio.
+                </p>
+                <p>
+                  <strong>Hardware & Optional Controls</strong>: Keep Screen Awake acquires a browser Wake Lock during countdowns; Vibration Feedback triggers haptic pulses during breaks; Pause Timer and Jump to Final 3s buttons are hidden by default for exam realism and can be enabled above.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 };

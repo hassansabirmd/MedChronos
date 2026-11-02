@@ -9,10 +9,6 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
-  Coffee,
-  Play,
-  CheckCircle2,
-  Undo2,
 } from 'lucide-react';
 import {
   EXAM_PROFILES,
@@ -153,15 +149,10 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
   return (
     <div className="space-y-8">
       {/* Header & Primary Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div>
-          <p className="text-xs font-medium text-teal-700 dark:text-teal-400">
-            Longitudinal Performance & Percentile Analytics
-          </p>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            Exam History & Percentile Trajectory
-          </h1>
-        </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          Exam History & Percentile Analytics
+        </h1>
         <button
           type="button"
           onClick={() => setShowAddForm((prev) => !prev)}
@@ -178,13 +169,10 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
           onSubmit={handleLogPreviousExam}
           className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5"
         >
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+          <div className="border-b border-slate-200 dark:border-slate-800 pb-3">
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              Save Previous Test History & Percentile Score
+              Log Previous Exam Score
             </h2>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Import past NBME, UWorld, ABIM, AMC, or MCPS assessments
-            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -392,9 +380,6 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
           <div className="mt-2 text-3xl font-bold font-mono text-slate-900 dark:text-slate-100 tabular-nums">
             {latestPercentile}th
           </div>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-            Target goal: {targetPercentileGoal}th percentile
-          </p>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
@@ -405,9 +390,6 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
           <div className="mt-2 text-3xl font-bold font-mono text-slate-900 dark:text-slate-100 tabular-nums">
             {averagePercentile}th
           </div>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-            Across {filteredHistory.length} recorded exams
-          </p>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
@@ -418,9 +400,6 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
           <div className="mt-2 text-3xl font-bold font-mono text-slate-900 dark:text-slate-100 tabular-nums">
             {totalQuestionsLogged.toLocaleString()}
           </div>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-            Timed board vignettes
-          </p>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
@@ -431,23 +410,15 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
           <div className="mt-2 text-3xl font-bold font-mono text-slate-900 dark:text-slate-100 tabular-nums">
             {formatMinutesToHoursAndMinutes(totalMinutesLogged)}
           </div>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-            Cumulative exam block time
-          </p>
         </div>
       </div>
 
       {/* Percentile Trajectory Visualization Card */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-              Percentile Progression Curve
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Visualizing exam percentile scores over time relative to your {targetPercentileGoal}th percentile target line
-            </p>
-          </div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            Percentile Progression
+          </h2>
 
           {/* Interactive Profile Filter Tabs */}
           <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
@@ -555,14 +526,9 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
       {/* Detailed Historical Log Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              Saved Practice Exams, Session Timelines & Percentile Log
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Detailed session records including exact test start time, end time, block intervals, and break timestamps
-            </p>
-          </div>
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+            Session Log
+          </h2>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
             {filteredHistory.length} entries
           </span>
