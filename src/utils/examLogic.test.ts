@@ -7,6 +7,10 @@ import {
   formatMinutesToHoursAndMinutes,
   formatSecondsToClock,
   calculateAmoledBurnInProtection,
+  advanceSessionByElapsedTime,
+  applyUndoSnapshotWithTimeAdjustment,
+  ActiveSessionRuntimeState,
+  SessionUndoSnapshot,
   DEFAULT_DECISION_TIMEOUT_SECONDS,
 } from './examLogic';
 
@@ -95,4 +99,88 @@ test('AMOLED burn-in protection shifts pixel coordinates and computes dimming ra
   assert.equal(clampedHigh.clampedDimmingRatio, 85);
   assert.equal(clampedHigh.activeLuminanceOpacity, 0.15);
 });
+
+test('advanceSessionByElapsedTime catches up wall-clock elapsed time across background/closed app transitions', () => {
+  const plan = calculateExamPlan('USMLE_STEP_1', 280, {
+    examTitle: 'NBME 30',
+    includeTutorial: false,
+  });
+
+  const baseMs = 1700000000000;
+  const initialState: ActiveSessionRuntimeState = {
+    phase: 'block',
+    isPaused: false,
+    currentBlockIndex: 0,
+    phaseRemainingSeconds: 120, // 2 minutes left in Block 1
+    breakPoolSeconds: 3300,
+    initialBreakPoolSeconds: 3300,
+    decisionRemainingSeconds: 60,
+    currentQuestionInBlock: 18,
+    blocksCompletedCount: 0,
+    totalStudySecondsElapsed: 1680,
+    autoContinuedCount: 0,
+    sessionStartedAtISO: new Date(baseMs - 1680000).toISOString(),
+    sessionStartedAtMs: baseMs - 1680000,
+    currentPhaseStartedAtMs: baseMs - 1680000,
+    lastTickTimestampMs: baseMs,
+    eventLog: [],
+  };
+
+  // Simulate user closing the app for 5 minutes (300 seconds):
+  // - 120s finishes Block 1
+  // - 60s expires the post-block decision prompt and auto-continues to Block 2
+  // - 120s elapses inside Block 2 (leaving 1800 - 120 = 1680s in Block 2)
+  const result = advanceSessionByElapsedTime(initialState, plan, baseMs + 300 * 1000, 60);
+
+  assert.equal(result.state.phase, 'block');
+  assert.equal(result.state.currentBlockIndex, 1);
+  assert.equal(result.state.blocksCompletedCount, 1);
+  assert.equal(result.state.autoContinuedCount, 1);
+  assert.equal(result.state.phaseRemainingSeconds, 1680);
+  assert.equal(result.bellTriggered, true);
+  assert.equal(result.state.eventLog.length, 3); // block_ended, auto_continued, block_started
+});
+
+test('applyUndoSnapshotWithTimeAdjustment restores break timer when user mistakenly ends break and starts block', () => {
+  const actionTimeMs = 1700000500000;
+  const breakStateBeforeMistake: ActiveSessionRuntimeState = {
+    phase: 'break',
+    isPaused: false,
+    currentBlockIndex: 0,
+    phaseRemainingSeconds: 0,
+    breakPoolSeconds: 3000, // 50:00 remaining in break pool
+    initialBreakPoolSeconds: 3300,
+    decisionRemainingSeconds: 60,
+    currentQuestionInBlock: 1,
+    blocksCompletedCount: 1,
+    totalStudySecondsElapsed: 1800,
+    autoContinuedCount: 0,
+    sessionStartedAtISO: new Date(actionTimeMs - 2100000).toISOString(),
+    sessionStartedAtMs: actionTimeMs - 2100000,
+    currentPhaseStartedAtMs: actionTimeMs - 300000,
+    lastTickTimestampMs: actionTimeMs,
+    eventLog: [],
+  };
+
+  const snapshot: SessionUndoSnapshot = {
+    id: 'undo-1',
+    actionDescription: 'Ended Break & Started Block 2',
+    actionTimestampMs: actionTimeMs,
+    previousState: breakStateBeforeMistake,
+  };
+
+  // User clicks Undo 18 seconds after accidentally starting Block 2
+  const restored = applyUndoSnapshotWithTimeAdjustment(
+    snapshot,
+    actionTimeMs + 18 * 1000,
+    false
+  );
+
+  assert.equal(restored.phase, 'break');
+  assert.equal(restored.currentBlockIndex, 0);
+  // Break pool should be properly adjusted for the 18 seconds that passed
+  assert.equal(restored.breakPoolSeconds, 2982);
+  assert.equal(restored.eventLog[restored.eventLog.length - 1].type, 'undo_applied');
+});
+
 

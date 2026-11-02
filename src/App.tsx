@@ -19,6 +19,7 @@ import {
   saveSettings,
   loadSchedule,
   saveSchedule,
+  loadActiveSession,
 } from './utils/storageAndSeed';
 import { ExamProfileId } from './utils/examLogic';
 
@@ -26,7 +27,9 @@ type ActiveTab = 'simulator' | 'history' | 'settings';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('simulator');
-  const [isExamTimerLocked, setIsExamTimerLocked] = useState<boolean>(false);
+  const [isExamTimerLocked, setIsExamTimerLocked] = useState<boolean>(() =>
+    Boolean(loadActiveSession())
+  );
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [history, setHistory] = useState<ExamHistoryEntry[]>(() => loadHistory());
   const [schedule, setSchedule] = useState<StudyScheduleItem[]>(() => loadSchedule());

@@ -1,6 +1,28 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, TrendingUp, Calendar, Award, BookOpen } from 'lucide-react';
-import { EXAM_PROFILES, ExamProfileId, formatMinutesToHoursAndMinutes } from '../utils/examLogic';
+import {
+  Plus,
+  Trash2,
+  TrendingUp,
+  Calendar,
+  Award,
+  BookOpen,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Coffee,
+  Play,
+  CheckCircle2,
+  Undo2,
+} from 'lucide-react';
+import {
+  EXAM_PROFILES,
+  ExamProfileId,
+  SessionTimelineEvent,
+  formatMinutesToHoursAndMinutes,
+  formatSecondsToClock,
+  formatTimestampToReadableTime,
+  createTimelineEvent,
+} from '../utils/examLogic';
 import { ExamHistoryEntry } from '../utils/storageAndSeed';
 
 interface HistoryAndAnalyticsViewProps {
@@ -18,6 +40,19 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
 }) => {
   const [filterProfile, setFilterProfile] = useState<string>('ALL');
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
+  const [expandedTimelineIds, setExpandedTimelineIds] = useState<Record<string, boolean>>(() => {
+    if (history.length > 0) {
+      return { [history[0].id]: true };
+    }
+    return {};
+  });
+
+  const toggleTimeline = (id: string) => {
+    setExpandedTimelineIds((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   // Manual past exam form state
   const [examTitle, setExamTitle] = useState<string>('');
@@ -72,24 +107,41 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
     }
 
     const prof = EXAM_PROFILES[profileId];
+    const nowMs = Date.now();
+    const durMins = Math.max(1, Number(studyMinutes) || 240);
+    const startMs = nowMs - durMins * 60 * 1000;
+    const numBlk = Math.max(1, Number(blocksCompleted) || prof.standardBlocks);
+
     const newEntry: ExamHistoryEntry = {
-      id: `manual-${Date.now()}`,
+      id: `manual-${nowMs}`,
       examTitle: examTitle.trim(),
       profileId,
       profileName: prof.name,
       dateISO: dateISO || new Date().toISOString().slice(0, 10),
+      sessionStartedAtISO: new Date(startMs).toISOString(),
+      sessionEndedAtISO: new Date(nowMs).toISOString(),
       totalQuestions: Math.max(1, Number(totalQuestions) || prof.standardTotalQuestions),
-      blocksCompleted: Math.max(1, Number(blocksCompleted) || prof.standardBlocks),
-      totalBlocksPlanned: Math.max(1, Number(blocksCompleted) || prof.standardBlocks),
-      totalStudyMinutes: Math.max(1, Number(studyMinutes) || 240),
+      blocksCompleted: numBlk,
+      totalBlocksPlanned: numBlk,
+      totalStudyMinutes: durMins,
       breakMinutesUsed: 30,
       percentileScore: Math.round(pct),
       percentCorrect: percentCorrect ? Math.min(100, Math.max(0, Number(percentCorrect))) : undefined,
       autoContinuedBlocksCount: 0,
       notes: notes.trim() || 'Logged historical practice assessment.',
+      eventLog: [
+        createTimelineEvent('session_started', 'Exam Session Started (Manual Log)', startMs, {
+          details: `${examTitle.trim()} (${prof.name}) — ${numBlk} blocks.`,
+        }),
+        createTimelineEvent('session_completed', 'Exam Session Completed (Manual Log)', nowMs, {
+          durationSeconds: durMins * 60,
+          details: `Completed ${numBlk} blocks (${durMins}m total study time).`,
+        }),
+      ],
     };
 
     onAddManualEntry(newEntry);
+    setExpandedTimelineIds((prev) => ({ ...prev, [newEntry.id]: true }));
     setExamTitle('');
     setPercentileScore('');
     setPercentCorrect('');
@@ -503,9 +555,14 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
       {/* Detailed Historical Log Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-            Saved Practice Exams & Percentile Log
-          </h2>
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Saved Practice Exams, Session Timelines & Percentile Log
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Detailed session records including exact test start time, end time, block intervals, and break timestamps
+            </p>
+          </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
             {filteredHistory.length} entries
           </span>
@@ -515,65 +572,208 @@ export const HistoryAndAnalyticsView: React.FC<HistoryAndAnalyticsViewProps> = (
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-50/60 dark:bg-slate-950/50">
-                <th className="py-3 px-6">Exam Name & Notes</th>
-                <th className="py-3 px-4">Profile</th>
-                <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4 text-right">Questions / Blocks</th>
-                <th className="py-3 px-4 text-right">Duration</th>
-                <th className="py-3 px-4 text-right">Percentile</th>
-                <th className="py-3 px-6 text-right">Action</th>
+                <th className="py-3 px-4">Exam Name & Notes</th>
+                <th className="py-3 px-3">Profile</th>
+                <th className="py-3 px-3">Date & Start/End Time</th>
+                <th className="py-3 px-3 text-right">Questions / Blocks</th>
+                <th className="py-3 px-3 text-right">Duration</th>
+                <th className="py-3 px-3 text-right">Percentile</th>
+                <th className="py-3 px-4 text-right">Timeline & Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
-              {filteredHistory.map((entry) => (
-                <tr
-                  key={entry.id}
-                  className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
-                >
-                  <td className="py-3.5 px-6">
-                    <div className="font-semibold text-slate-900 dark:text-slate-100">
-                      {entry.examTitle}
-                    </div>
-                    {entry.notes && (
-                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 max-w-md truncate">
-                        {entry.notes}
-                      </div>
+              {filteredHistory.map((entry) => {
+                const isExpanded = Boolean(expandedTimelineIds[entry.id]);
+                const events = entry.eventLog || [];
+                const startTimeFormatted = entry.sessionStartedAtISO
+                  ? formatTimestampToReadableTime(entry.sessionStartedAtISO)
+                  : null;
+                const endTimeFormatted = entry.sessionEndedAtISO
+                  ? formatTimestampToReadableTime(entry.sessionEndedAtISO)
+                  : null;
+
+                return (
+                  <React.Fragment key={entry.id}>
+                    <tr className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="font-semibold text-slate-900 dark:text-slate-100">
+                          {entry.examTitle}
+                        </div>
+                        {entry.notes && (
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 max-w-xs truncate">
+                            {entry.notes}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-3 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {entry.profileName}
+                      </td>
+                      <td className="py-3.5 px-3 text-xs font-mono text-slate-600 dark:text-slate-400 tabular-nums whitespace-nowrap">
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          {entry.dateISO}
+                        </div>
+                        {(startTimeFormatted || endTimeFormatted) && (
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            {startTimeFormatted || '—'} → {endTimeFormatted || '—'}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-3 text-xs font-mono text-right text-slate-700 dark:text-slate-300 tabular-nums whitespace-nowrap">
+                        {entry.totalQuestions} Qs · {entry.blocksCompleted}/{entry.totalBlocksPlanned} blk
+                      </td>
+                      <td className="py-3.5 px-3 text-xs font-mono text-right text-slate-700 dark:text-slate-300 tabular-nums whitespace-nowrap">
+                        <div>{formatMinutesToHoursAndMinutes(entry.totalStudyMinutes)}</div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {entry.breakMinutesUsed}m break used
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3 text-right font-mono tabular-nums whitespace-nowrap">
+                        <span className="font-bold text-teal-700 dark:text-teal-400">
+                          {entry.percentileScore}th
+                        </span>
+                        {entry.percentCorrect !== undefined && (
+                          <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">
+                            ({entry.percentCorrect}%)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            data-testid={`toggle-timeline-btn-${entry.id}`}
+                            onClick={() => toggleTimeline(entry.id)}
+                            className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Clock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                            <span>Timeline ({events.length})</span>
+                            {isExpanded ? (
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => onDeleteEntry(entry.id)}
+                            aria-label={`Delete ${entry.examTitle}`}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {isExpanded && (
+                      <tr
+                        data-testid={`session-timeline-panel-${entry.id}`}
+                        className="bg-slate-50/70 dark:bg-slate-950/60"
+                      >
+                        <td colSpan={7} className="px-4 py-4">
+                          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-4">
+                            {/* Session Start / End Summary Strip */}
+                            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-3 text-xs">
+                              <div className="flex flex-wrap items-center gap-4">
+                                <div>
+                                  <span className="text-slate-500 dark:text-slate-400">
+                                    Test Start Time:{' '}
+                                  </span>
+                                  <span
+                                    data-testid={`session-start-time-${entry.id}`}
+                                    className="font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums"
+                                  >
+                                    {startTimeFormatted || `${entry.dateISO} (Start not recorded)`}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 dark:text-slate-400">
+                                    Test End Time:{' '}
+                                  </span>
+                                  <span
+                                    data-testid={`session-end-time-${entry.id}`}
+                                    className="font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums"
+                                  >
+                                    {endTimeFormatted || `${entry.dateISO} (End not recorded)`}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                                {entry.blocksCompleted}/{entry.totalBlocksPlanned} Blocks ·{' '}
+                                {entry.breakMinutesUsed}m Break Used
+                              </div>
+                            </div>
+
+                            {/* Chronological Event Log */}
+                            {events.length === 0 ? (
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                No granular block/break timeline events were recorded for this entry.
+                              </p>
+                            ) : (
+                              <div className="space-y-2">
+                                <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                  Chronological Block & Break Event Log
+                                </div>
+                                <div className="grid grid-cols-1 gap-2 max-h-72 overflow-y-auto pr-1">
+                                  {events.map((evt: SessionTimelineEvent) => {
+                                    const isBreakEvent =
+                                      evt.type === 'break_started' || evt.type === 'break_ended';
+                                    const isBlockEvent =
+                                      evt.type === 'block_started' ||
+                                      evt.type === 'block_ended' ||
+                                      evt.type === 'auto_continued';
+                                    const isUndoEvent = evt.type === 'undo_applied';
+
+                                    return (
+                                      <div
+                                        key={evt.id}
+                                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/50 text-xs"
+                                      >
+                                        <div className="flex items-start sm:items-center gap-2.5">
+                                          <span
+                                            className={`px-2 py-0.5 rounded font-mono text-[11px] font-semibold shrink-0 ${
+                                              isBreakEvent
+                                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                                                : isUndoEvent
+                                                ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                                                : isBlockEvent
+                                                ? 'bg-teal-100 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300'
+                                                : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                            }`}
+                                          >
+                                            {formatTimestampToReadableTime(evt.timestampISO)}
+                                          </span>
+                                          <div>
+                                            <span className="font-bold text-slate-900 dark:text-slate-100">
+                                              {evt.label}
+                                            </span>
+                                            {evt.details && (
+                                              <span className="text-slate-600 dark:text-slate-400 ml-2">
+                                                — {evt.details}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {evt.durationSeconds !== undefined && (
+                                          <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
+                                            Duration: {formatSecondsToClock(evt.durationSeconds)}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td className="py-3.5 px-4 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                    {entry.profileName}
-                  </td>
-                  <td className="py-3.5 px-4 text-xs font-mono text-slate-600 dark:text-slate-400 tabular-nums whitespace-nowrap">
-                    {entry.dateISO}
-                  </td>
-                  <td className="py-3.5 px-4 text-xs font-mono text-right text-slate-700 dark:text-slate-300 tabular-nums whitespace-nowrap">
-                    {entry.totalQuestions} Qs · {entry.blocksCompleted}/{entry.totalBlocksPlanned} blk
-                  </td>
-                  <td className="py-3.5 px-4 text-xs font-mono text-right text-slate-700 dark:text-slate-300 tabular-nums whitespace-nowrap">
-                    {formatMinutesToHoursAndMinutes(entry.totalStudyMinutes)}
-                  </td>
-                  <td className="py-3.5 px-4 text-right font-mono tabular-nums whitespace-nowrap">
-                    <span className="font-bold text-teal-700 dark:text-teal-400">
-                      {entry.percentileScore}th
-                    </span>
-                    {entry.percentCorrect !== undefined && (
-                      <span className="text-xs text-slate-500 dark:text-slate-400 ml-1.5">
-                        ({entry.percentCorrect}%)
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-6 text-right whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => onDeleteEntry(entry.id)}
-                      aria-label={`Delete ${entry.examTitle}`}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

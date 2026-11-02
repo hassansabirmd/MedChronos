@@ -378,3 +378,400 @@ export function calculateAmoledBurnInProtection(
   };
 }
 
+export type ActiveSessionPhase =
+  | 'tutorial'
+  | 'block'
+  | 'decision_prompt'
+  | 'break'
+  | 'percentile_entry';
+
+export type TimelineEventType =
+  | 'session_started'
+  | 'tutorial_started'
+  | 'tutorial_ended'
+  | 'block_started'
+  | 'block_ended'
+  | 'break_started'
+  | 'break_ended'
+  | 'auto_continued'
+  | 'undo_applied'
+  | 'session_completed';
+
+export interface SessionTimelineEvent {
+  id: string;
+  type: TimelineEventType;
+  label: string;
+  timestampISO: string;
+  timestampMs: number;
+  blockNumber?: number;
+  durationSeconds?: number;
+  details?: string;
+}
+
+export interface ActiveSessionRuntimeState {
+  phase: ActiveSessionPhase;
+  isPaused: boolean;
+  currentBlockIndex: number;
+  phaseRemainingSeconds: number;
+  breakPoolSeconds: number;
+  initialBreakPoolSeconds: number;
+  decisionRemainingSeconds: number;
+  currentQuestionInBlock: number;
+  blocksCompletedCount: number;
+  totalStudySecondsElapsed: number;
+  autoContinuedCount: number;
+  sessionStartedAtISO: string;
+  sessionStartedAtMs: number;
+  currentPhaseStartedAtMs: number;
+  lastTickTimestampMs: number;
+  eventLog: SessionTimelineEvent[];
+}
+
+export interface SessionUndoSnapshot {
+  id: string;
+  actionDescription: string;
+  actionTimestampMs: number;
+  previousState: ActiveSessionRuntimeState;
+}
+
+export function formatTimestampToReadableTime(isoOrMs: string | number): string {
+  const date = typeof isoOrMs === 'number' ? new Date(isoOrMs) : new Date(isoOrMs);
+  if (Number.isNaN(date.getTime())) return '--:--:--';
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+export function createTimelineEvent(
+  type: TimelineEventType,
+  label: string,
+  timestampMs: number,
+  extra: {
+    blockNumber?: number;
+    durationSeconds?: number;
+    details?: string;
+  } = {}
+): SessionTimelineEvent {
+  return {
+    id: `evt-${timestampMs}-${Math.random().toString(36).slice(2, 7)}`,
+    type,
+    label,
+    timestampISO: new Date(timestampMs).toISOString(),
+    timestampMs,
+    ...extra,
+  };
+}
+
+export interface AdvanceSessionResult {
+  state: ActiveSessionRuntimeState;
+  bellTriggered: boolean;
+  breakExpiredVibrationTriggered: boolean;
+  periodicBreakPulseTriggered: boolean;
+}
+
+/**
+ * Advances an active exam session deterministically based on wall-clock elapsed time
+ * (`nowMs - state.lastTickTimestampMs`). Works seamlessly whether 1 second has elapsed
+ * in the foreground or 45 minutes have elapsed while the app was in the background or closed.
+ */
+export function advanceSessionByElapsedTime(
+  state: ActiveSessionRuntimeState,
+  examPlan: CalculatedExamPlan,
+  nowMs: number,
+  decisionTimeoutSeconds: number = DEFAULT_DECISION_TIMEOUT_SECONDS
+): AdvanceSessionResult {
+  if (state.isPaused || state.phase === 'percentile_entry') {
+    return {
+      state: {
+        ...state,
+        lastTickTimestampMs: nowMs,
+      },
+      bellTriggered: false,
+      breakExpiredVibrationTriggered: false,
+      periodicBreakPulseTriggered: false,
+    };
+  }
+
+  const totalElapsedSeconds = Math.floor((nowMs - state.lastTickTimestampMs) / 1000);
+  if (totalElapsedSeconds <= 0) {
+    return {
+      state,
+      bellTriggered: false,
+      breakExpiredVibrationTriggered: false,
+      periodicBreakPulseTriggered: false,
+    };
+  }
+
+  let remainingToAdvance = totalElapsedSeconds;
+  let cursorMs = state.lastTickTimestampMs;
+  let next: ActiveSessionRuntimeState = {
+    ...state,
+    eventLog: [...state.eventLog],
+  };
+
+  let bellTriggered = false;
+  let breakExpiredVibrationTriggered = false;
+  let periodicBreakPulseTriggered = false;
+
+  while (remainingToAdvance > 0 && next.phase !== 'percentile_entry') {
+    if (next.phase === 'tutorial') {
+      if (remainingToAdvance < next.phaseRemainingSeconds) {
+        next.phaseRemainingSeconds -= remainingToAdvance;
+        cursorMs += remainingToAdvance * 1000;
+        remainingToAdvance = 0;
+      } else {
+        const spent = Math.max(1, next.phaseRemainingSeconds);
+        cursorMs += spent * 1000;
+        remainingToAdvance -= spent;
+        const tutorialDurationSec = Math.max(
+          0,
+          Math.round((cursorMs - next.currentPhaseStartedAtMs) / 1000)
+        );
+        const firstBlock = examPlan.blocks[0];
+        next.eventLog.push(
+          createTimelineEvent('tutorial_ended', 'Orientation Tutorial Completed', cursorMs, {
+            durationSeconds: tutorialDurationSec,
+            details: `Completed full ${examPlan.tutorialMinutes}m tutorial.`,
+          }),
+          createTimelineEvent(
+            'block_started',
+            `Block 1 of ${examPlan.numBlocks} Started`,
+            cursorMs,
+            {
+              blockNumber: 1,
+              details: `Started Block 1 (${firstBlock.questionCount} questions, ${firstBlock.durationMinutes}m).`,
+            }
+          )
+        );
+        next.phase = 'block';
+        next.currentBlockIndex = 0;
+        next.currentQuestionInBlock = 1;
+        next.phaseRemainingSeconds = firstBlock.durationSeconds;
+        next.currentPhaseStartedAtMs = cursorMs;
+        bellTriggered = true;
+      }
+    } else if (next.phase === 'block') {
+      const currentBlock = examPlan.blocks[next.currentBlockIndex] || examPlan.blocks[0];
+      if (remainingToAdvance < next.phaseRemainingSeconds) {
+        next.phaseRemainingSeconds -= remainingToAdvance;
+        next.totalStudySecondsElapsed += remainingToAdvance;
+        cursorMs += remainingToAdvance * 1000;
+        remainingToAdvance = 0;
+      } else {
+        const spent = Math.max(1, next.phaseRemainingSeconds);
+        cursorMs += spent * 1000;
+        remainingToAdvance -= spent;
+        next.totalStudySecondsElapsed += spent;
+        next.phaseRemainingSeconds = 0;
+        next.blocksCompletedCount += 1;
+        const blockActualDurationSec = Math.max(
+          1,
+          Math.round((cursorMs - next.currentPhaseStartedAtMs) / 1000)
+        );
+        next.eventLog.push(
+          createTimelineEvent(
+            'block_ended',
+            `Block ${next.currentBlockIndex + 1} of ${examPlan.numBlocks} Ended`,
+            cursorMs,
+            {
+              blockNumber: next.currentBlockIndex + 1,
+              durationSeconds: blockActualDurationSec,
+              details: `Block ${next.currentBlockIndex + 1} timer expired (${formatSecondsToClock(
+                blockActualDurationSec
+              )} elapsed).`,
+            }
+          )
+        );
+        bellTriggered = true;
+
+        if (next.currentBlockIndex >= examPlan.numBlocks - 1) {
+          next.eventLog.push(
+            createTimelineEvent(
+              'session_completed',
+              'All Exam Blocks Completed',
+              cursorMs,
+              {
+                durationSeconds: Math.max(
+                  1,
+                  Math.round((cursorMs - next.sessionStartedAtMs) / 1000)
+                ),
+                details: `Completed all ${examPlan.numBlocks} blocks.`,
+              }
+            )
+          );
+          next.phase = 'percentile_entry';
+          next.currentPhaseStartedAtMs = cursorMs;
+        } else {
+          next.phase = 'decision_prompt';
+          next.decisionRemainingSeconds = decisionTimeoutSeconds;
+          next.currentPhaseStartedAtMs = cursorMs;
+        }
+      }
+    } else if (next.phase === 'decision_prompt') {
+      if (remainingToAdvance < next.decisionRemainingSeconds) {
+        next.decisionRemainingSeconds -= remainingToAdvance;
+        cursorMs += remainingToAdvance * 1000;
+        remainingToAdvance = 0;
+      } else {
+        const spent = Math.max(1, next.decisionRemainingSeconds);
+        cursorMs += spent * 1000;
+        remainingToAdvance -= spent;
+        const nextBlockIdx = Math.min(examPlan.numBlocks - 1, next.currentBlockIndex + 1);
+        const nextBlock = examPlan.blocks[nextBlockIdx];
+        next.autoContinuedCount += 1;
+        next.eventLog.push(
+          createTimelineEvent(
+            'auto_continued',
+            `1-Minute Decision Timeout — Auto-Continued to Block ${nextBlockIdx + 1}`,
+            cursorMs,
+            {
+              blockNumber: nextBlockIdx + 1,
+              durationSeconds: spent,
+              details: `No break response within ${decisionTimeoutSeconds}s; automatically started Block ${
+                nextBlockIdx + 1
+              } without break.`,
+            }
+          ),
+          createTimelineEvent(
+            'block_started',
+            `Block ${nextBlockIdx + 1} of ${examPlan.numBlocks} Started`,
+            cursorMs,
+            {
+              blockNumber: nextBlockIdx + 1,
+              details: `Started Block ${nextBlockIdx + 1} (${nextBlock.questionCount} questions, ${nextBlock.durationMinutes}m).`,
+            }
+          )
+        );
+        next.phase = 'block';
+        next.currentBlockIndex = nextBlockIdx;
+        next.currentQuestionInBlock = 1;
+        next.phaseRemainingSeconds = nextBlock.durationSeconds;
+        next.currentPhaseStartedAtMs = cursorMs;
+        bellTriggered = true;
+      }
+    } else if (next.phase === 'break') {
+      if (remainingToAdvance < next.breakPoolSeconds) {
+        const prevBreakSec = next.breakPoolSeconds;
+        next.breakPoolSeconds -= remainingToAdvance;
+        if (Math.floor(prevBreakSec / 60) !== Math.floor(next.breakPoolSeconds / 60)) {
+          periodicBreakPulseTriggered = true;
+        }
+        cursorMs += remainingToAdvance * 1000;
+        remainingToAdvance = 0;
+      } else {
+        const spent = Math.max(1, next.breakPoolSeconds);
+        cursorMs += spent * 1000;
+        remainingToAdvance -= spent;
+        const breakActualDurationSec = Math.max(
+          1,
+          Math.round((cursorMs - next.currentPhaseStartedAtMs) / 1000)
+        );
+        const nextBlockIdx = Math.min(examPlan.numBlocks - 1, next.currentBlockIndex + 1);
+        const nextBlock = examPlan.blocks[nextBlockIdx];
+        next.breakPoolSeconds = 0;
+        next.eventLog.push(
+          createTimelineEvent(
+            'break_ended',
+            `Break Ended (Pool Depleted Before Block ${nextBlockIdx + 1})`,
+            cursorMs,
+            {
+              blockNumber: nextBlockIdx + 1,
+              durationSeconds: breakActualDurationSec,
+              details: `Break lasted ${formatSecondsToClock(
+                breakActualDurationSec
+              )}. Break pool is now 00:00.`,
+            }
+          ),
+          createTimelineEvent(
+            'block_started',
+            `Block ${nextBlockIdx + 1} of ${examPlan.numBlocks} Started`,
+            cursorMs,
+            {
+              blockNumber: nextBlockIdx + 1,
+              details: `Started Block ${nextBlockIdx + 1} (${nextBlock.questionCount} questions, ${nextBlock.durationMinutes}m).`,
+            }
+          )
+        );
+        next.phase = 'block';
+        next.currentBlockIndex = nextBlockIdx;
+        next.currentQuestionInBlock = 1;
+        next.phaseRemainingSeconds = nextBlock.durationSeconds;
+        next.currentPhaseStartedAtMs = cursorMs;
+        bellTriggered = true;
+        breakExpiredVibrationTriggered = true;
+      }
+    }
+  }
+
+  next.lastTickTimestampMs = state.lastTickTimestampMs + totalElapsedSeconds * 1000;
+
+  return {
+    state: next,
+    bellTriggered,
+    breakExpiredVibrationTriggered,
+    periodicBreakPulseTriggered,
+  };
+}
+
+/**
+ * Restores a previous session state from an Undo snapshot and deducts the real wall-clock
+ * time elapsed since the mistaken action so the user returns to the previous phase
+ * (e.g., returning from an accidentally started Block back to the Break timer) with
+ * accurate time adjustment.
+ */
+export function applyUndoSnapshotWithTimeAdjustment(
+  snapshot: SessionUndoSnapshot,
+  nowMs: number,
+  isCurrentlyPaused: boolean = false
+): ActiveSessionRuntimeState {
+  const elapsedSinceActionSeconds = isCurrentlyPaused
+    ? 0
+    : Math.max(0, Math.floor((nowMs - snapshot.actionTimestampMs) / 1000));
+
+  const restored: ActiveSessionRuntimeState = {
+    ...snapshot.previousState,
+    eventLog: [...snapshot.previousState.eventLog],
+    lastTickTimestampMs: nowMs,
+  };
+
+  if (restored.phase === 'break') {
+    restored.breakPoolSeconds = Math.max(
+      1,
+      restored.breakPoolSeconds - elapsedSinceActionSeconds
+    );
+  } else if (restored.phase === 'block') {
+    restored.phaseRemainingSeconds = Math.max(
+      1,
+      restored.phaseRemainingSeconds - elapsedSinceActionSeconds
+    );
+    restored.totalStudySecondsElapsed += elapsedSinceActionSeconds;
+  } else if (restored.phase === 'tutorial') {
+    restored.phaseRemainingSeconds = Math.max(
+      1,
+      restored.phaseRemainingSeconds - elapsedSinceActionSeconds
+    );
+  } else if (restored.phase === 'decision_prompt') {
+    restored.decisionRemainingSeconds = Math.max(
+      5,
+      restored.decisionRemainingSeconds - elapsedSinceActionSeconds
+    );
+  }
+
+  restored.eventLog.push(
+    createTimelineEvent(
+      'undo_applied',
+      `Undid Action: ${snapshot.actionDescription}`,
+      nowMs,
+      {
+        durationSeconds: elapsedSinceActionSeconds,
+        details: `Restored ${restored.phase.replace('_', ' ')} timer with ${elapsedSinceActionSeconds}s elapsed time adjustment.`,
+      }
+    )
+  );
+
+  return restored;
+}
+
+

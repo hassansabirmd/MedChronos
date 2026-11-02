@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play,
   Pause,
@@ -22,22 +22,34 @@ import {
   Move,
   Settings,
   X,
+  Undo2,
 } from 'lucide-react';
 import {
   EXAM_PROFILES,
   ExamProfileId,
   CalculatedExamPlan,
+  ActiveSessionPhase,
+  ActiveSessionRuntimeState,
+  SessionTimelineEvent,
+  SessionUndoSnapshot,
   calculateExamPlan,
   evaluateBlockPacing,
   formatSecondsToClock,
   formatMinutesToHoursAndMinutes,
+  formatTimestampToReadableTime,
   resolvePostBlockDecision,
   calculateAmoledBurnInProtection,
+  createTimelineEvent,
+  advanceSessionByElapsedTime,
+  applyUndoSnapshotWithTimeAdjustment,
   DEFAULT_DECISION_TIMEOUT_SECONDS,
 } from '../utils/examLogic';
 import {
   AppSettings,
   ExamHistoryEntry,
+  loadActiveSession,
+  saveActiveSession,
+  clearActiveSession,
 } from '../utils/storageAndSeed';
 import {
   playNotificationBell,
@@ -60,13 +72,7 @@ interface ExamSetupAndTimerViewProps {
   onClearPreset?: () => void;
 }
 
-type SessionPhase =
-  | 'setup'
-  | 'tutorial'
-  | 'block'
-  | 'decision_prompt'
-  | 'break'
-  | 'percentile_entry';
+type SessionPhase = 'setup' | ActiveSessionPhase;
 
 export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   settings,
@@ -77,19 +83,61 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   initialPreset,
   onClearPreset,
 }) => {
+  // Load and catch up any persisted active timer session on mount (if app was closed while timer ran)
+  const initialResumedSession = useMemo(() => {
+    const saved = loadActiveSession();
+    if (!saved) return null;
+    const plan = calculateExamPlan(saved.selectedProfileId, saved.totalQuestions, {
+      examTitle: saved.examTitle,
+      includeTutorial: saved.includeTutorial,
+      customBlockDurationMinutes: saved.customBlockMinutes
+        ? Number(saved.customBlockMinutes)
+        : undefined,
+      customQuestionsPerBlock: saved.customQuestionsPerBlock
+        ? Number(saved.customQuestionsPerBlock)
+        : undefined,
+      customBreakMinutes:
+        saved.customBreakMinutes !== '' ? Number(saved.customBreakMinutes) : undefined,
+    });
+    const caughtUp = advanceSessionByElapsedTime(
+      saved.runtimeState,
+      plan,
+      Date.now(),
+      settings.autoContinueTimeoutSeconds || DEFAULT_DECISION_TIMEOUT_SECONDS
+    );
+    return {
+      ...saved,
+      runtimeState: caughtUp.state,
+    };
+  }, []);
+
   // Configuration state
-  const [selectedProfileId, setSelectedProfileId] = useState<ExamProfileId>('USMLE_STEP_1');
-  const [examTitle, setExamTitle] = useState<string>('NBME 30');
-  const [totalQuestions, setTotalQuestions] = useState<number>(280);
-  const [includeTutorial, setIncludeTutorial] = useState<boolean>(true);
+  const [selectedProfileId, setSelectedProfileId] = useState<ExamProfileId>(
+    initialResumedSession?.selectedProfileId ?? 'USMLE_STEP_1'
+  );
+  const [examTitle, setExamTitle] = useState<string>(
+    initialResumedSession?.examTitle ?? 'NBME 30'
+  );
+  const [totalQuestions, setTotalQuestions] = useState<number>(
+    initialResumedSession?.totalQuestions ?? 280
+  );
+  const [includeTutorial, setIncludeTutorial] = useState<boolean>(
+    initialResumedSession?.includeTutorial ?? true
+  );
   const [showCustomOverrides, setShowCustomOverrides] = useState<boolean>(false);
-  const [customBlockMinutes, setCustomBlockMinutes] = useState<string>('');
-  const [customQuestionsPerBlock, setCustomQuestionsPerBlock] = useState<string>('');
-  const [customBreakMinutes, setCustomBreakMinutes] = useState<string>('');
+  const [customBlockMinutes, setCustomBlockMinutes] = useState<string>(
+    initialResumedSession?.customBlockMinutes ?? ''
+  );
+  const [customQuestionsPerBlock, setCustomQuestionsPerBlock] = useState<string>(
+    initialResumedSession?.customQuestionsPerBlock ?? ''
+  );
+  const [customBreakMinutes, setCustomBreakMinutes] = useState<string>(
+    initialResumedSession?.customBreakMinutes ?? ''
+  );
 
   // Apply preset from Study Schedule if clicked
   useEffect(() => {
-    if (initialPreset) {
+    if (initialPreset && phase === 'setup') {
       setSelectedProfileId(initialPreset.profileId);
       setExamTitle(initialPreset.examTitle);
       setTotalQuestions(initialPreset.totalQuestions);
@@ -109,26 +157,156 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
     customBreakMinutes: customBreakMinutes !== '' ? Number(customBreakMinutes) : undefined,
   });
 
-  // Active simulation state
-  const [phase, setPhase] = useState<SessionPhase>('setup');
-  const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [currentBlockIndex, setCurrentBlockIndex] = useState<number>(0);
-  const [phaseRemainingSeconds, setPhaseRemainingSeconds] = useState<number>(0);
-  const [breakPoolSeconds, setBreakPoolSeconds] = useState<number>(0);
-  const [initialBreakPoolSeconds, setInitialBreakPoolSeconds] = useState<number>(0);
-  const [decisionRemainingSeconds, setDecisionRemainingSeconds] = useState<number>(
-    DEFAULT_DECISION_TIMEOUT_SECONDS
+  // Active simulation state (initialized from resumed session if present)
+  const [phase, setPhase] = useState<SessionPhase>(
+    initialResumedSession?.runtimeState.phase ?? 'setup'
   );
-  const [currentQuestionInBlock, setCurrentQuestionInBlock] = useState<number>(1);
-  const [blocksCompletedCount, setBlocksCompletedCount] = useState<number>(0);
-  const [totalStudySecondsElapsed, setTotalStudySecondsElapsed] = useState<number>(0);
-  const [autoContinuedCount, setAutoContinuedCount] = useState<number>(0);
+  const [isPaused, setIsPaused] = useState<boolean>(
+    initialResumedSession?.runtimeState.isPaused ?? false
+  );
+  const [currentBlockIndex, setCurrentBlockIndex] = useState<number>(
+    initialResumedSession?.runtimeState.currentBlockIndex ?? 0
+  );
+  const [phaseRemainingSeconds, setPhaseRemainingSeconds] = useState<number>(
+    initialResumedSession?.runtimeState.phaseRemainingSeconds ?? 0
+  );
+  const [breakPoolSeconds, setBreakPoolSeconds] = useState<number>(
+    initialResumedSession?.runtimeState.breakPoolSeconds ?? 0
+  );
+  const [initialBreakPoolSeconds, setInitialBreakPoolSeconds] = useState<number>(
+    initialResumedSession?.runtimeState.initialBreakPoolSeconds ?? 0
+  );
+  const [decisionRemainingSeconds, setDecisionRemainingSeconds] = useState<number>(
+    initialResumedSession?.runtimeState.decisionRemainingSeconds ?? DEFAULT_DECISION_TIMEOUT_SECONDS
+  );
+  const [currentQuestionInBlock, setCurrentQuestionInBlock] = useState<number>(
+    initialResumedSession?.runtimeState.currentQuestionInBlock ?? 1
+  );
+  const [blocksCompletedCount, setBlocksCompletedCount] = useState<number>(
+    initialResumedSession?.runtimeState.blocksCompletedCount ?? 0
+  );
+  const [totalStudySecondsElapsed, setTotalStudySecondsElapsed] = useState<number>(
+    initialResumedSession?.runtimeState.totalStudySecondsElapsed ?? 0
+  );
+  const [autoContinuedCount, setAutoContinuedCount] = useState<number>(
+    initialResumedSession?.runtimeState.autoContinuedCount ?? 0
+  );
+  const [sessionStartedAtISO, setSessionStartedAtISO] = useState<string>(
+    initialResumedSession?.runtimeState.sessionStartedAtISO ?? new Date().toISOString()
+  );
+  const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number>(
+    initialResumedSession?.runtimeState.sessionStartedAtMs ?? Date.now()
+  );
+  const [currentPhaseStartedAtMs, setCurrentPhaseStartedAtMs] = useState<number>(
+    initialResumedSession?.runtimeState.currentPhaseStartedAtMs ?? Date.now()
+  );
+  const [lastTickTimestampMs, setLastTickTimestampMs] = useState<number>(
+    initialResumedSession?.runtimeState.lastTickTimestampMs ?? Date.now()
+  );
+  const [eventLog, setEventLog] = useState<SessionTimelineEvent[]>(
+    initialResumedSession?.runtimeState.eventLog ?? []
+  );
+  const [undoStack, setUndoStack] = useState<SessionUndoSnapshot[]>(
+    initialResumedSession?.undoStack ?? []
+  );
+
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [wakeLockActive, setWakeLockActive] = useState<boolean>(false);
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState<boolean>(false);
   const [amoledShiftStep, setAmoledShiftStep] = useState<number>(0);
   const [isTimerSettingsModalOpen, setIsTimerSettingsModalOpen] = useState<boolean>(false);
   const amoledTickCounterRef = useRef<number>(0);
+
+  // Build current runtime state object helper
+  const buildCurrentRuntimeState = (
+    overridePartial?: Partial<ActiveSessionRuntimeState>
+  ): ActiveSessionRuntimeState | null => {
+    if (phase === 'setup') return null;
+    return {
+      phase,
+      isPaused,
+      currentBlockIndex,
+      phaseRemainingSeconds,
+      breakPoolSeconds,
+      initialBreakPoolSeconds,
+      decisionRemainingSeconds,
+      currentQuestionInBlock,
+      blocksCompletedCount,
+      totalStudySecondsElapsed,
+      autoContinuedCount,
+      sessionStartedAtISO,
+      sessionStartedAtMs,
+      currentPhaseStartedAtMs,
+      lastTickTimestampMs,
+      eventLog,
+      ...overridePartial,
+    };
+  };
+
+  const applyRuntimeState = (next: ActiveSessionRuntimeState) => {
+    setPhase(next.phase);
+    setIsPaused(next.isPaused);
+    setCurrentBlockIndex(next.currentBlockIndex);
+    setPhaseRemainingSeconds(next.phaseRemainingSeconds);
+    setBreakPoolSeconds(next.breakPoolSeconds);
+    setInitialBreakPoolSeconds(next.initialBreakPoolSeconds);
+    setDecisionRemainingSeconds(next.decisionRemainingSeconds);
+    setCurrentQuestionInBlock(next.currentQuestionInBlock);
+    setBlocksCompletedCount(next.blocksCompletedCount);
+    setTotalStudySecondsElapsed(next.totalStudySecondsElapsed);
+    setAutoContinuedCount(next.autoContinuedCount);
+    setSessionStartedAtISO(next.sessionStartedAtISO);
+    setSessionStartedAtMs(next.sessionStartedAtMs);
+    setCurrentPhaseStartedAtMs(next.currentPhaseStartedAtMs);
+    setLastTickTimestampMs(next.lastTickTimestampMs);
+    setEventLog(next.eventLog);
+  };
+
+  // Persist active session to localStorage so closing and reopening the app resumes seamlessly
+  useEffect(() => {
+    if (phase === 'setup') {
+      clearActiveSession();
+      return;
+    }
+    const runtimeState = buildCurrentRuntimeState();
+    if (!runtimeState) return;
+    saveActiveSession({
+      selectedProfileId,
+      examTitle,
+      totalQuestions,
+      includeTutorial,
+      customBlockMinutes,
+      customQuestionsPerBlock,
+      customBreakMinutes,
+      runtimeState,
+      undoStack,
+    });
+  }, [
+    phase,
+    isPaused,
+    currentBlockIndex,
+    phaseRemainingSeconds,
+    breakPoolSeconds,
+    initialBreakPoolSeconds,
+    decisionRemainingSeconds,
+    currentQuestionInBlock,
+    blocksCompletedCount,
+    totalStudySecondsElapsed,
+    autoContinuedCount,
+    sessionStartedAtISO,
+    sessionStartedAtMs,
+    currentPhaseStartedAtMs,
+    lastTickTimestampMs,
+    eventLog,
+    undoStack,
+    selectedProfileId,
+    examTitle,
+    totalQuestions,
+    includeTutorial,
+    customBlockMinutes,
+    customQuestionsPerBlock,
+    customBreakMinutes,
+  ]);
 
   // Sync lock state to parent App so navigation tabs are hidden whenever timer is active
   useEffect(() => {
@@ -184,9 +362,6 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
     };
   }, [phase, isPaused, settings.keepScreenAwake]);
 
-  // Keep latest handlers in ref for clean 1-second interval tick
-  const tickRef = useRef<() => void>(() => {});
-
   const handleProfileChange = (newProfileId: ExamProfileId) => {
     setSelectedProfileId(newProfileId);
     const p = EXAM_PROFILES[newProfileId];
@@ -199,8 +374,60 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
     }
   };
 
+  const pushUndoSnapshot = (
+    actionDescription: string,
+    nowMs: number,
+    currentRuntime: ActiveSessionRuntimeState
+  ): SessionUndoSnapshot[] => {
+    const snapshot: SessionUndoSnapshot = {
+      id: `undo-${nowMs}-${Math.random().toString(36).slice(2, 6)}`,
+      actionDescription,
+      actionTimestampMs: nowMs,
+      previousState: {
+        ...currentRuntime,
+        eventLog: [...currentRuntime.eventLog],
+      },
+    };
+    return [...undoStack.slice(-9), snapshot];
+  };
+
   const startExamSimulation = (skipTutorial: boolean = false) => {
+    const nowMs = Date.now();
+    const nowISO = new Date(nowMs).toISOString();
     const startBreakSec = examPlan.totalBreakMinutes * 60;
+
+    if (typeof document !== 'undefined' && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+
+    const initialEvents: SessionTimelineEvent[] = [
+      createTimelineEvent('session_started', 'Exam Simulation Started', nowMs, {
+        details: `${examPlan.examTitle} (${examPlan.profile.name}) — ${examPlan.numBlocks} blocks planned.`,
+      }),
+    ];
+
+    const startingPhase: ActiveSessionPhase =
+      !skipTutorial && examPlan.tutorialMinutes > 0 ? 'tutorial' : 'block';
+    const startingRemainingSec =
+      startingPhase === 'tutorial'
+        ? examPlan.tutorialMinutes * 60
+        : examPlan.blocks[0].durationSeconds;
+
+    if (startingPhase === 'tutorial') {
+      initialEvents.push(
+        createTimelineEvent('tutorial_started', 'Orientation Tutorial Started', nowMs, {
+          details: `${examPlan.tutorialMinutes}m tutorial countdown started.`,
+        })
+      );
+    } else {
+      initialEvents.push(
+        createTimelineEvent('block_started', 'Block 1 Started', nowMs, {
+          blockNumber: 1,
+          details: `Started Block 1 of ${examPlan.numBlocks} (${examPlan.blocks[0].questionCount} Qs).`,
+        })
+      );
+    }
+
     setBreakPoolSeconds(startBreakSec);
     setInitialBreakPoolSeconds(startBreakSec);
     setCurrentBlockIndex(0);
@@ -210,34 +437,106 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
     setAutoContinuedCount(0);
     setIsPaused(false);
     setStatusBanner(null);
+    setSessionStartedAtISO(nowISO);
+    setSessionStartedAtMs(nowMs);
+    setCurrentPhaseStartedAtMs(nowMs);
+    setLastTickTimestampMs(nowMs);
+    setEventLog(initialEvents);
+    setUndoStack([]);
+    setPhase(startingPhase);
+    setPhaseRemainingSeconds(startingRemainingSec);
+  };
 
-    if (typeof document !== 'undefined' && !document.fullscreenElement) {
-      document.documentElement.requestFullscreen?.().catch(() => {});
-    }
+  const handleSkipTutorialToBlock1 = () => {
+    const nowMs = Date.now();
+    const currentRuntime = buildCurrentRuntimeState();
+    if (!currentRuntime) return;
 
-    if (!skipTutorial && examPlan.tutorialMinutes > 0) {
-      setPhase('tutorial');
-      setPhaseRemainingSeconds(examPlan.tutorialMinutes * 60);
-    } else {
-      setPhase('block');
-      setPhaseRemainingSeconds(examPlan.blocks[0].durationSeconds);
-    }
+    const tutorialElapsedSec = Math.max(
+      0,
+      examPlan.tutorialMinutes * 60 - phaseRemainingSeconds
+    );
+    const nextUndoStack = pushUndoSnapshot(
+      'Skipped Tutorial & Started Block 1',
+      nowMs,
+      currentRuntime
+    );
+    const nextEvents: SessionTimelineEvent[] = [
+      ...eventLog,
+      createTimelineEvent('tutorial_ended', 'Tutorial Ended Early', nowMs, {
+        durationSeconds: tutorialElapsedSec,
+        details: `Skipped remaining ${formatSecondsToClock(phaseRemainingSeconds)} of tutorial.`,
+      }),
+      createTimelineEvent('block_started', 'Block 1 Started', nowMs, {
+        blockNumber: 1,
+        details: `Started Block 1 of ${examPlan.numBlocks} (${examPlan.blocks[0].questionCount} Qs).`,
+      }),
+    ];
+
+    setUndoStack(nextUndoStack);
+    setEventLog(nextEvents);
+    setBreakPoolSeconds((b) => b + phaseRemainingSeconds);
+    setPhase('block');
+    setCurrentBlockIndex(0);
+    setCurrentQuestionInBlock(1);
+    setPhaseRemainingSeconds(examPlan.blocks[0].durationSeconds);
+    setCurrentPhaseStartedAtMs(nowMs);
+    setLastTickTimestampMs(nowMs);
   };
 
   const triggerBlockCompletion = (unusedSecondsRollover: number = 0) => {
+    const nowMs = Date.now();
+    const currentRuntime = buildCurrentRuntimeState();
+
     // Ring notification bell after every block
     playNotificationBell(settings.notificationTone, settings.notificationVolume);
     if (settings.vibrateDuringBreak) {
       triggerVibration([250, 120, 250]);
     }
 
+    const activeBlk = examPlan.blocks[currentBlockIndex] || examPlan.blocks[0];
+    const blockSpentSec = Math.max(0, activeBlk.durationSeconds - unusedSecondsRollover);
     const updatedCompleted = blocksCompletedCount + 1;
-    setBlocksCompletedCount(updatedCompleted);
-
     const newBreakPool = breakPoolSeconds + Math.max(0, unusedSecondsRollover);
-    setBreakPoolSeconds(newBreakPool);
-
     const isLastBlock = currentBlockIndex >= examPlan.blocks.length - 1;
+
+    const nextUndoStack = currentRuntime
+      ? pushUndoSnapshot(
+          `Completed Block ${currentBlockIndex + 1}`,
+          nowMs,
+          currentRuntime
+        )
+      : undoStack;
+
+    const nextEvents: SessionTimelineEvent[] = [
+      ...eventLog,
+      createTimelineEvent('block_ended', `Block ${currentBlockIndex + 1} Ended`, nowMs, {
+        blockNumber: currentBlockIndex + 1,
+        durationSeconds: blockSpentSec,
+        details:
+          unusedSecondsRollover > 0
+            ? `Block ${currentBlockIndex + 1} completed early (+${formatSecondsToClock(
+                unusedSecondsRollover
+              )} added to break pool).`
+            : `Block ${currentBlockIndex + 1} completed.`,
+      }),
+    ];
+
+    if (isLastBlock) {
+      nextEvents.push(
+        createTimelineEvent('session_completed', 'All Exam Blocks Completed', nowMs, {
+          details: `Completed all ${examPlan.numBlocks} blocks.`,
+        })
+      );
+    }
+
+    setUndoStack(nextUndoStack);
+    setEventLog(nextEvents);
+    setBlocksCompletedCount(updatedCompleted);
+    setBreakPoolSeconds(newBreakPool);
+    setCurrentPhaseStartedAtMs(nowMs);
+    setLastTickTimestampMs(nowMs);
+
     if (isLastBlock) {
       setStatusBanner('All scheduled blocks completed. Log your percentile score below.');
       setPhase('percentile_entry');
@@ -245,20 +544,18 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
     }
 
     // Prompt user whether they need a break or want to continue to next block (60s timeout)
-    setDecisionRemainingSeconds(settings.autoContinueTimeoutSeconds || DEFAULT_DECISION_TIMEOUT_SECONDS);
+    setDecisionRemainingSeconds(
+      settings.autoContinueTimeoutSeconds || DEFAULT_DECISION_TIMEOUT_SECONDS
+    );
     setPhase('decision_prompt');
-    if (unusedSecondsRollover > 0) {
-      setStatusBanner(
-        `Block ${currentBlockIndex + 1} finished early. +${formatSecondsToClock(unusedSecondsRollover)} added to break bank.`
-      );
-    } else {
-      setStatusBanner(`Block ${currentBlockIndex + 1} complete. Select Break or Continue within 60 seconds.`);
-    }
   };
 
   const handleDecisionChoice = (
     choice: 'take_break' | 'continue_next_block' | 'timeout_auto_continue'
   ) => {
+    const nowMs = Date.now();
+    const currentRuntime = buildCurrentRuntimeState();
+
     const resolution = resolvePostBlockDecision(
       choice,
       currentBlockIndex,
@@ -267,102 +564,180 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
     );
 
     if (resolution.nextPhase === 'completed') {
+      setEventLog((prev) => [
+        ...prev,
+        createTimelineEvent('session_completed', 'Exam Session Completed', nowMs, {
+          details: `Ended session after Block ${currentBlockIndex + 1}.`,
+        }),
+      ]);
+      setCurrentPhaseStartedAtMs(nowMs);
+      setLastTickTimestampMs(nowMs);
       setPhase('percentile_entry');
       return;
     }
 
     if (resolution.nextPhase === 'break') {
+      if (currentRuntime) {
+        setUndoStack(
+          pushUndoSnapshot(
+            `Started Break Before Block ${resolution.nextBlockIndex + 1}`,
+            nowMs,
+            currentRuntime
+          )
+        );
+      }
+      setEventLog((prev) => [
+        ...prev,
+        createTimelineEvent(
+          'break_started',
+          `Break Availed (After Block ${currentBlockIndex + 1})`,
+          nowMs,
+          {
+            blockNumber: currentBlockIndex + 1,
+            details: `Break started with ${formatSecondsToClock(breakPoolSeconds)} available in pool.`,
+          }
+        ),
+      ]);
       setPhase('break');
       setIsPaused(false);
+      setCurrentPhaseStartedAtMs(nowMs);
+      setLastTickTimestampMs(nowMs);
       if (settings.vibrateDuringBreak) {
         triggerVibration([150, 80, 150]);
       }
-      setStatusBanner(
-        `Break active before Block ${resolution.nextBlockIndex + 1}. Vibration feedback ${
-          settings.vibrateDuringBreak ? 'enabled' : 'off'
-        }.`
-      );
       return;
     }
 
     // Continue directly to next block
     const nextIdx = resolution.nextBlockIndex;
+    if (currentRuntime) {
+      setUndoStack(
+        pushUndoSnapshot(
+          `Skipped Break & Started Block ${nextIdx + 1}`,
+          nowMs,
+          currentRuntime
+        )
+      );
+    }
+
+    setEventLog((prev) => [
+      ...prev,
+      createTimelineEvent(
+        resolution.autoContinuedWithoutBreak ? 'auto_continued' : 'block_started',
+        `Block ${nextIdx + 1} Started`,
+        nowMs,
+        {
+          blockNumber: nextIdx + 1,
+          details: resolution.autoContinuedWithoutBreak
+            ? `1-minute decision prompt unanswered — auto-started Block ${nextIdx + 1} without break.`
+            : `Continued directly to Block ${nextIdx + 1} without break.`,
+        }
+      ),
+    ]);
+
     setCurrentBlockIndex(nextIdx);
     setCurrentQuestionInBlock(1);
     setPhaseRemainingSeconds(examPlan.blocks[nextIdx].durationSeconds);
     setPhase('block');
     setIsPaused(false);
+    setCurrentPhaseStartedAtMs(nowMs);
+    setLastTickTimestampMs(nowMs);
 
     if (resolution.autoContinuedWithoutBreak) {
       setAutoContinuedCount((prev) => prev + 1);
       playNotificationBell(settings.notificationTone, settings.notificationVolume);
-      setStatusBanner(
-        `No response within 1 minute — automatically started Block ${nextIdx + 1} without break.`
-      );
-    } else {
-      setStatusBanner(`Started Block ${nextIdx + 1} of ${examPlan.numBlocks}.`);
     }
   };
 
   const resumeBlockFromBreak = () => {
+    const nowMs = Date.now();
+    const currentRuntime = buildCurrentRuntimeState();
     const nextIdx = Math.min(examPlan.blocks.length - 1, currentBlockIndex + 1);
+    const breakSpentSec = Math.max(0, Math.round((nowMs - currentPhaseStartedAtMs) / 1000));
+
+    if (currentRuntime) {
+      setUndoStack(
+        pushUndoSnapshot(
+          `Ended Break & Started Block ${nextIdx + 1}`,
+          nowMs,
+          currentRuntime
+        )
+      );
+    }
+
+    setEventLog((prev) => [
+      ...prev,
+      createTimelineEvent('break_ended', `Break Ended (Before Block ${nextIdx + 1})`, nowMs, {
+        blockNumber: nextIdx + 1,
+        durationSeconds: breakSpentSec,
+        details: `Break ended with ${formatSecondsToClock(breakPoolSeconds)} remaining in pool.`,
+      }),
+      createTimelineEvent('block_started', `Block ${nextIdx + 1} Started`, nowMs, {
+        blockNumber: nextIdx + 1,
+        details: `Started Block ${nextIdx + 1} of ${examPlan.numBlocks} (${examPlan.blocks[nextIdx].questionCount} Qs).`,
+      }),
+    ]);
+
     setCurrentBlockIndex(nextIdx);
     setCurrentQuestionInBlock(1);
     setPhaseRemainingSeconds(examPlan.blocks[nextIdx].durationSeconds);
     setPhase('block');
     setIsPaused(false);
+    setCurrentPhaseStartedAtMs(nowMs);
+    setLastTickTimestampMs(nowMs);
     playNotificationBell(settings.notificationTone, settings.notificationVolume);
-    setStatusBanner(`Break ended. Block ${nextIdx + 1} of ${examPlan.numBlocks} is now active.`);
   };
 
-  tickRef.current = () => {
-    if (isPaused) return;
+  const handleUndoLastAction = () => {
+    if (undoStack.length === 0) return;
+    const latestSnapshot = undoStack[undoStack.length - 1];
+    const restoredState = applyUndoSnapshotWithTimeAdjustment(
+      latestSnapshot,
+      Date.now(),
+      isPaused
+    );
+    setUndoStack((prev) => prev.slice(0, -1));
+    applyRuntimeState(restoredState);
+  };
 
-    if (settings.amoledAlwaysOnDisplay) {
-      amoledTickCounterRef.current += 1;
-      if (amoledTickCounterRef.current % 10 === 0) {
-        setAmoledShiftStep((step) => step + 1);
+  // Wall-clock synchronized tick function (works across background tabs, sleep, and reopened app)
+  const syncWallClockRef = useRef<(nowMs: number) => void>(() => {});
+  syncWallClockRef.current = (nowMs: number) => {
+    if (phase === 'setup' || phase === 'percentile_entry') return;
+    const currentRuntime = buildCurrentRuntimeState();
+    if (!currentRuntime) return;
+
+    if (!isPaused && settings.amoledAlwaysOnDisplay) {
+      const elapsedSec = Math.floor((nowMs - currentRuntime.lastTickTimestampMs) / 1000);
+      if (elapsedSec > 0) {
+        amoledTickCounterRef.current += elapsedSec;
+        if (amoledTickCounterRef.current >= 10) {
+          const shifts = Math.floor(amoledTickCounterRef.current / 10);
+          amoledTickCounterRef.current = amoledTickCounterRef.current % 10;
+          setAmoledShiftStep((step) => step + shifts);
+        }
       }
     }
 
-    if (phase === 'tutorial') {
-      if (phaseRemainingSeconds <= 1) {
+    const result = advanceSessionByElapsedTime(
+      currentRuntime,
+      examPlan,
+      nowMs,
+      settings.autoContinueTimeoutSeconds || DEFAULT_DECISION_TIMEOUT_SECONDS
+    );
+
+    if (result.state !== currentRuntime) {
+      applyRuntimeState(result.state);
+      if (result.bellTriggered) {
         playNotificationBell(settings.notificationTone, settings.notificationVolume);
-        setPhase('block');
-        setCurrentBlockIndex(0);
-        setCurrentQuestionInBlock(1);
-        setPhaseRemainingSeconds(examPlan.blocks[0].durationSeconds);
-        setStatusBanner('Tutorial complete. Block 1 has started.');
-      } else {
-        setPhaseRemainingSeconds((s) => s - 1);
       }
-    } else if (phase === 'block') {
-      setTotalStudySecondsElapsed((s) => s + 1);
-      if (phaseRemainingSeconds <= 1) {
-        triggerBlockCompletion(0);
-      } else {
-        setPhaseRemainingSeconds((s) => s - 1);
-      }
-    } else if (phase === 'decision_prompt') {
-      if (decisionRemainingSeconds <= 1) {
-        handleDecisionChoice('timeout_auto_continue');
-      } else {
-        setDecisionRemainingSeconds((s) => s - 1);
-      }
-    } else if (phase === 'break') {
-      if (breakPoolSeconds <= 1) {
-        setBreakPoolSeconds(0);
-        if (settings.vibrateDuringBreak) {
-          triggerVibration([300, 100, 300, 100, 300]);
-        }
-        resumeBlockFromBreak();
-      } else {
-        const nextBreakSec = breakPoolSeconds - 1;
-        setBreakPoolSeconds(nextBreakSec);
-        // Periodic gentle vibration pulse every 60s during break if enabled
-        if (settings.vibrateDuringBreak && nextBreakSec % 60 === 0) {
-          triggerVibration(120);
-        }
+      if (
+        (result.breakExpiredVibrationTriggered || result.periodicBreakPulseTriggered) &&
+        settings.vibrateDuringBreak
+      ) {
+        triggerVibration(
+          result.breakExpiredVibrationTriggered ? [300, 100, 300] : [120]
+        );
       }
     }
   };
@@ -370,10 +745,63 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   useEffect(() => {
     if (phase === 'setup' || phase === 'percentile_entry') return;
     const interval = window.setInterval(() => {
-      tickRef.current();
-    }, 1000);
-    return () => window.clearInterval(interval);
+      syncWallClockRef.current(Date.now());
+    }, 500);
+
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        syncWallClockRef.current(Date.now());
+      }
+    };
+    const handleWindowFocus = () => {
+      syncWallClockRef.current(Date.now());
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('pageshow', handleWindowFocus);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('pageshow', handleWindowFocus);
+    };
   }, [phase]);
+
+  const handleFinishSessionEarly = () => {
+    const nowMs = Date.now();
+    playNotificationBell(settings.notificationTone, settings.notificationVolume);
+    const extraEvents: SessionTimelineEvent[] = [];
+    if (phase === 'block') {
+      const activeBlk = examPlan.blocks[currentBlockIndex] || examPlan.blocks[0];
+      const spentSec = Math.max(0, activeBlk.durationSeconds - phaseRemainingSeconds);
+      extraEvents.push(
+        createTimelineEvent('block_ended', `Block ${currentBlockIndex + 1} Ended`, nowMs, {
+          blockNumber: currentBlockIndex + 1,
+          durationSeconds: spentSec,
+          details: `Ended Block ${currentBlockIndex + 1} to finish exam session.`,
+        })
+      );
+    } else if (phase === 'break') {
+      const spentSec = Math.max(0, Math.round((nowMs - currentPhaseStartedAtMs) / 1000));
+      extraEvents.push(
+        createTimelineEvent('break_ended', 'Break Ended', nowMs, {
+          durationSeconds: spentSec,
+          details: 'Break ended to finish exam session.',
+        })
+      );
+    }
+    extraEvents.push(
+      createTimelineEvent('session_completed', 'Exam Session Finished', nowMs, {
+        details: `Finished session with ${Math.max(1, blocksCompletedCount)} of ${examPlan.numBlocks} blocks completed.`,
+      })
+    );
+    setEventLog((prev) => [...prev, ...extraEvents]);
+    setCurrentPhaseStartedAtMs(nowMs);
+    setLastTickTimestampMs(nowMs);
+    setPhase('percentile_entry');
+  };
 
   const handleSaveSessionScore = (e: React.FormEvent) => {
     e.preventDefault();
@@ -404,12 +832,16 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
         examPlan.blockDurationMinutes
     );
 
+    const endedISO = new Date().toISOString();
+
     const newEntry: ExamHistoryEntry = {
       id: `session-${Date.now()}`,
       examTitle: examPlan.examTitle,
       profileId: selectedProfileId,
       profileName: examPlan.profile.name,
-      dateISO: new Date().toISOString().slice(0, 10),
+      dateISO: endedISO.slice(0, 10),
+      sessionStartedAtISO,
+      sessionEndedAtISO: endedISO,
       totalQuestions: examPlan.totalQuestions,
       blocksCompleted: Math.max(1, blocksCompletedCount),
       totalBlocksPlanned: examPlan.numBlocks,
@@ -421,8 +853,10 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
       notes:
         sessionNotesInput.trim() ||
         `Completed ${Math.max(1, blocksCompletedCount)}/${examPlan.numBlocks} blocks under ${examPlan.profile.shortCode} timing regulations.`,
+      eventLog,
     };
 
+    clearActiveSession();
     onSaveSessionToHistory(newEntry);
     setPercentileError(null);
     setPhase('setup');
@@ -1062,7 +1496,10 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                     <button
                       type="button"
                       data-testid="timer-pause-btn"
-                      onClick={() => setIsPaused((p) => !p)}
+                      onClick={() => {
+                        setLastTickTimestampMs(Date.now());
+                        setIsPaused((p) => !p);
+                      }}
                       className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
                         isAmoledBwTheme
                           ? 'bg-white text-black hover:bg-zinc-200'
@@ -1081,12 +1518,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                   {phase === 'tutorial' && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setBreakPoolSeconds((b) => b + phaseRemainingSeconds);
-                        setPhase('block');
-                        setCurrentBlockIndex(0);
-                        setPhaseRemainingSeconds(examPlan.blocks[0].durationSeconds);
-                      }}
+                      onClick={handleSkipTutorialToBlock1}
                       className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
                         isAmoledBwTheme
                           ? 'border border-white bg-black text-white hover:bg-zinc-900'
@@ -1133,6 +1565,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       type="button"
                       data-testid="timer-jump-3s-btn"
                       onClick={() => {
+                        setLastTickTimestampMs(Date.now());
                         if (phase === 'break') {
                           setBreakPoolSeconds((s) => Math.max(3, s - 300));
                         } else {
@@ -1153,13 +1586,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => {
-                      playNotificationBell(
-                        settings.notificationTone,
-                        settings.notificationVolume
-                      );
-                      setPhase('percentile_entry');
-                    }}
+                    onClick={handleFinishSessionEarly}
                     aria-label="Finish Exam & Log Score"
                     className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
                       isAmoledBwTheme
@@ -1175,17 +1602,17 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
             </div>
           </div>
 
-          {/* POPUP MODAL FOR QUESTION PACING TRACKER & ALWAYS-ON DISPLAY SETTINGS (Triggered by Top-Right Settings Icon) */}
+          {/* POPUP MODAL FOR QUESTION PACING TRACKER, UNDO LAST ACTION & ALWAYS-ON DISPLAY SETTINGS */}
           {isTimerSettingsModalOpen && (
             <div
               data-testid="timer-tools-popup-modal"
               role="dialog"
               aria-modal="true"
               aria-labelledby="timer-tools-modal-title"
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 overflow-y-auto"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4"
             >
               <div
-                className={`w-full max-w-2xl rounded-2xl border p-6 sm:p-8 shadow-2xl space-y-6 my-8 ${
+                className={`w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border p-5 sm:p-6 shadow-2xl space-y-4 ${
                   isPitchBlackCanvas
                     ? 'bg-black border-zinc-700 text-white'
                     : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100'
@@ -1193,7 +1620,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
               >
                 {/* Modal Header */}
                 <div
-                  className={`flex items-center justify-between gap-4 border-b pb-4 ${
+                  className={`flex items-center justify-between gap-4 border-b pb-3 ${
                     isPitchBlackCanvas
                       ? 'border-zinc-800'
                       : 'border-slate-200 dark:border-slate-800'
@@ -1226,6 +1653,59 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                   >
                     <X className="w-4 h-4" />
                   </button>
+                </div>
+
+                {/* Card 0: Undo Last Action Card */}
+                <div
+                  data-testid="undo-last-action-card"
+                  className={`rounded-2xl border p-5 space-y-3 ${
+                    isPitchBlackCanvas
+                      ? 'bg-black border-zinc-800'
+                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-base font-bold">Undo Last Action</h4>
+                        {undoStack.length > 0 && (
+                          <span
+                            className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+                              isAmoledBwTheme
+                                ? 'border-white text-white'
+                                : 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300'
+                            }`}
+                          >
+                            {undoStack.length} {undoStack.length === 1 ? 'step' : 'steps'} available
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {undoStack.length > 0
+                          ? `Last action: "${undoStack[undoStack.length - 1].actionDescription}". Undoing restores the previous phase (e.g. returning to Break timer) and adjusts elapsed seconds automatically.`
+                          : 'No phase transitions recorded yet in this session. Mistakenly ending a break or block can be reversed here with automatic time adjustment.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="undo-last-action-btn"
+                      disabled={undoStack.length === 0}
+                      onClick={() => {
+                        handleUndoLastAction();
+                        setIsTimerSettingsModalOpen(false);
+                      }}
+                      className={`px-4 py-2.5 rounded-xl font-bold text-xs inline-flex items-center justify-center gap-2 transition-colors shrink-0 ${
+                        undoStack.length === 0
+                          ? 'opacity-40 cursor-not-allowed border border-slate-300 dark:border-slate-700 text-slate-400'
+                          : isAmoledBwTheme
+                          ? 'bg-white text-black hover:bg-zinc-200 cursor-pointer'
+                          : 'bg-amber-600 hover:bg-amber-700 text-white cursor-pointer'
+                      }`}
+                    >
+                      <Undo2 className="w-3.5 h-3.5" />
+                      <span>Undo Last Action</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Card 1: Intuitive Question Pacing Tracker Card */}
@@ -1496,6 +1976,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      clearActiveSession();
                       setIsTimerSettingsModalOpen(false);
                       setPhase('setup');
                     }}
@@ -1588,7 +2069,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                 <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setPhase('percentile_entry')}
+                    onClick={handleFinishSessionEarly}
                     className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
                   >
                     End Exam Session Here
