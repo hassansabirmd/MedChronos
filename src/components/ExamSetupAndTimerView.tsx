@@ -8,8 +8,6 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
-  Plus,
-  Minus,
   FastForward,
   Flag,
   RotateCcw,
@@ -33,7 +31,6 @@ import {
   SessionTimelineEvent,
   SessionUndoSnapshot,
   calculateExamPlan,
-  evaluateBlockPacing,
   formatSecondsToClock,
   formatMinutesToHoursAndMinutes,
   formatTimestampToReadableTime,
@@ -864,12 +861,6 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
   };
 
   const activeBlock = examPlan.blocks[currentBlockIndex] || examPlan.blocks[0];
-  const pacing = evaluateBlockPacing(
-    currentQuestionInBlock,
-    activeBlock.questionCount,
-    phaseRemainingSeconds,
-    activeBlock.durationSeconds
-  );
 
   // Calculate SVG progress circle for active timer
   const currentPhaseTotalSec =
@@ -1266,8 +1257,8 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
               type="button"
               data-testid="timer-top-right-settings-btn"
               onClick={() => setIsTimerSettingsModalOpen(true)}
-              aria-label="Open Question Pacing and Always-On Display Settings"
-              title="Question Pacing Tracker & Always-On Display Settings"
+              aria-label="Open Session Controls and Always-On Display Settings"
+              title="Session Controls & Always-On Display Settings"
               className={`p-2.5 rounded-xl border transition-colors cursor-pointer shadow-xs ${
                 isAmoledBwTheme
                   ? 'bg-black border-white/60 text-white hover:bg-zinc-900'
@@ -1637,7 +1628,7 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       In-Session Controls & Display Protection
                     </span>
                     <h3 id="timer-tools-modal-title" className="text-xl font-bold mt-0.5">
-                      Question Pacing & Always-On AMOLED Settings
+                      Session Controls & Always-On AMOLED Settings
                     </h3>
                   </div>
                   <button
@@ -1705,153 +1696,6 @@ export const ExamSetupAndTimerView: React.FC<ExamSetupAndTimerViewProps> = ({
                       <Undo2 className="w-3.5 h-3.5" />
                       <span>Undo Last Action</span>
                     </button>
-                  </div>
-                </div>
-
-                {/* Card 1: Intuitive Question Pacing Tracker Card */}
-                <div
-                  data-testid="popup-question-pacing-card"
-                  className={`rounded-2xl border p-5 space-y-4 ${
-                    isPitchBlackCanvas
-                      ? 'bg-black border-zinc-800'
-                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
-                  }`}
-                >
-                  <div
-                    className={`border-b pb-3 flex items-center justify-between gap-3 ${
-                      isPitchBlackCanvas
-                        ? 'border-zinc-800'
-                        : 'border-slate-200 dark:border-slate-800'
-                    }`}
-                  >
-                    <div>
-                      <h4 className="text-base font-bold">
-                        Intuitive Question Pacing Tracker
-                      </h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Target cadence: {examPlan.secondsPerQuestion}s per question
-                      </p>
-                    </div>
-                    <span className="text-xs font-mono font-semibold tabular-nums whitespace-nowrap shrink-0">
-                      Q {currentQuestionInBlock} / {activeBlock.questionCount}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                      Current Question
-                    </span>
-                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                      <button
-                        type="button"
-                        aria-label="Previous question"
-                        onClick={() => setCurrentQuestionInBlock((q) => Math.max(1, q - 1))}
-                        className="p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="w-10 text-center font-mono font-bold text-base tabular-nums">
-                        {currentQuestionInBlock}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label="Next question"
-                        onClick={() =>
-                          setCurrentQuestionInBlock((q) =>
-                            Math.min(activeBlock.questionCount, q + 1)
-                          )
-                        }
-                        className="p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCurrentQuestionInBlock((q) =>
-                            Math.min(activeBlock.questionCount, q + 5)
-                          )
-                        }
-                        className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-semibold hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        +5 Qs
-                      </button>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`grid grid-cols-2 gap-3 pt-2 border-t text-xs ${
-                      isPitchBlackCanvas
-                        ? 'border-zinc-800'
-                        : 'border-slate-200/70 dark:border-slate-800'
-                    }`}
-                  >
-                    <div>
-                      <span className="text-slate-500 dark:text-slate-400 block">
-                        Time Per Remaining Q
-                      </span>
-                      <span className="font-mono font-bold text-sm tabular-nums">
-                        {pacing.secondsRemainingPerQuestion}s / question
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 dark:text-slate-400 block">
-                        Pacing Status
-                      </span>
-                      <span
-                        className={`font-semibold ${
-                          isAmoledBwTheme
-                            ? 'text-white'
-                            : pacing.status === 'behind'
-                            ? 'text-amber-600 dark:text-amber-400'
-                            : 'text-teal-700 dark:text-teal-400'
-                        }`}
-                      >
-                        {pacing.message}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Block Sequence Summary inside Pacing Card */}
-                  <div
-                    className={`pt-3 border-t space-y-2 ${
-                      isPitchBlackCanvas
-                        ? 'border-zinc-800'
-                        : 'border-slate-200/70 dark:border-slate-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold">
-                        Exam Block Sequence ({examPlan.numBlocks} Blocks)
-                      </span>
-                      <span className="font-mono text-slate-500 dark:text-slate-400 tabular-nums">
-                        {blocksCompletedCount} of {examPlan.numBlocks} completed
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-5 sm:grid-cols-7 gap-1.5 max-h-28 overflow-y-auto pr-1">
-                      {examPlan.blocks.map((blk, idx) => {
-                        const isCompleted =
-                          idx < currentBlockIndex ||
-                          (idx === currentBlockIndex && phase === 'decision_prompt');
-                        const isCurrent = idx === currentBlockIndex && phase === 'block';
-                        return (
-                          <div
-                            key={blk.blockNumber}
-                            className={`p-1.5 rounded-lg border text-center font-mono text-[11px] tabular-nums ${
-                              isCurrent
-                                ? isAmoledBwTheme
-                                  ? 'border-white bg-white text-black font-bold'
-                                  : 'border-teal-600 bg-teal-50 dark:border-teal-400 dark:bg-teal-950/50 text-teal-900 dark:text-teal-200 font-bold'
-                                : isCompleted
-                                ? 'border-slate-200 dark:border-slate-800 opacity-60'
-                                : 'border-slate-200/60 dark:border-slate-800/60 opacity-40'
-                            }`}
-                          >
-                            B{blk.blockNumber} · {blk.durationMinutes}m
-                          </div>
-                        );
-                      })}
-                    </div>
                   </div>
                 </div>
 
